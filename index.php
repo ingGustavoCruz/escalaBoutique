@@ -89,6 +89,7 @@ $nombreCorto = $partesNombre[0];
             theme: {
                 extend: {
                     colors: {
+                        'escala-blue': '#1e3a8a',
                         'escala-green': '#00524A', 
                         'escala-dark': '#003d36',
                         'escala-alert': '#FF9900',
@@ -182,7 +183,7 @@ $nombreCorto = $partesNombre[0];
     </style>
 </head>
 
-<body class="bg-white text-slate-800 min-h-screen flex flex-col">
+<body class="bg-slate-50 text-gray-900 text-slate-800 min-h-screen flex flex-col">
 
     <div x-show="showToast" x-cloak x-transition class="fixed top-5 right-5 z-[100] px-6 py-4 bg-white rounded-lg shadow-xl flex items-center gap-3 border-l-4 border-escala-green">
         <i data-lucide="check" class="w-5 h-5 text-escala-green"></i>
@@ -247,54 +248,59 @@ $nombreCorto = $partesNombre[0];
                 <p class="font-medium text-lg">No hay productos disponibles.</p>
             </div>
         <?php else: ?>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <?php foreach($productos as $p): ?>
             <div x-show="(currentCategory === 'Todos' || currentCategory === '<?php echo $p['categoria']; ?>') && ('<?php echo strtolower($p['nombre']); ?>'.includes(searchQuery.toLowerCase()) || '<?php echo $p['precio']; ?>'.includes(searchQuery.replace('$','').trim()))"
-                 class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-all duration-300 flex flex-col relative group"
+                 class="bg-white rounded-3xl p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] transition-all duration-300 border border-escala-dark flex flex-col relative group"
                  x-data="{ activeImg: 0, imgs: <?php echo htmlspecialchars(json_encode($p['imagenes']), ENT_QUOTES, 'UTF-8'); ?>, qty: 1 }">
                 
-                <div class="absolute top-0 left-0"><?php if ($p['es_top'] == 1): ?><div class="badge-top">TOP VENTAS</div><?php endif; ?></div>
-                <div class="absolute top-4 right-0 flex flex-col gap-1 items-end">
+                <div class="absolute top-4 left-0"><?php if ($p['es_top'] == 1): ?><div class="badge-top">TOP VENTAS</div><?php endif; ?></div>
+                <div class="absolute top-4 right-0 flex flex-col items-end space-y-2">
                      <?php if ($p['stock'] <= 5): ?><div class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div><?php endif; ?>
                      <?php if ($p['en_oferta'] == 1): ?><div class="badge-right bg-sale">EN OFERTA</div><?php endif; ?>
                 </div>
 
-                <div class="h-64 flex items-center justify-center mb-6 relative">
-                    <img :src="imgs[activeImg]" class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 mix-blend-multiply">
+                <div class="h-72 flex items-center justify-center mb-8 relative p-4">
+                    <img :src="imgs[activeImg]" class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
                     <template x-if="imgs.length > 1">
                         <div class="absolute inset-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button @click.stop="activeImg = (activeImg === 0) ? imgs.length - 1 : activeImg - 1" class="p-1 bg-white/80 rounded-full shadow hover:bg-escala-green hover:text-white"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-                            <button @click.stop="activeImg = (activeImg === imgs.length - 1) ? 0 : activeImg + 1" class="p-1 bg-white/80 rounded-full shadow hover:bg-escala-green hover:text-white"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                            <button @click.stop="activeImg = (activeImg === 0) ? imgs.length - 1 : activeImg - 1" class="p-2 bg-white rounded-full shadow-md hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                            <button @click.stop="activeImg = (activeImg === imgs.length - 1) ? 0 : activeImg + 1" class="p-2 bg-white rounded-full shadow-md hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                         </div>
                     </template>
                 </div>
 
-                <div class="flex flex-col flex-grow">
-                    <h3 class="font-black text-base text-slate-900 mb-2 uppercase leading-tight line-clamp-2"><?php echo $p['nombre']; ?></h3>
+                <div class="flex flex-col flex-grow items-center text-center">
+                    <h3 class="font-black text-xl text-slate-900 mb-3 uppercase leading-tight line-clamp-2"><?php echo $p['nombre']; ?></h3>
                     
-                    <div class="flex items-center gap-1 mb-2">
+                    <div class="flex items-center gap-1 mb-4 justify-center">
                         <?php for($i=1; $i<=5; $i++): $color = ($i <= (int)$p['calificacion']) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'; ?>
-                        <i data-lucide="star" class="w-3 h-3 <?php echo $color; ?>"></i><?php endfor; ?>
-                        <span class="text-[10px] text-gray-400 font-bold ml-1">Stock: <?php echo $p['stock']; ?></span>
+                        <i data-lucide="star" class="w-4 h-4 <?php echo $color; ?>"></i><?php endfor; ?>
                     </div>
 
-                    <div class="mt-auto pt-4 border-t border-gray-100">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center bg-gray-50 rounded-lg border border-gray-200">
-                                <button @click="if(qty > 1) qty--" class="px-2 py-1 hover:text-escala-green"><i data-lucide="minus" class="w-3 h-3"></i></button>
-                                <span class="w-4 text-center font-bold text-xs" x-text="qty"></span>
-                                <button @click="if(qty < <?php echo $p['stock']; ?>) qty++; else alert('Max stock')" class="px-2 py-1 hover:text-escala-green"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                    <p class="text-xs text-gray-500 mb-6 font-bold uppercase tracking-wider">STOCK: <span class="text-blue-600"><?php echo $p['stock']; ?></span></p>
+
+                    <div class="mt-auto w-full">
+                        <div class="flex items-center justify-center gap-4 mb-8">
+                             <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner">
+                                <button @click="if(qty > 1) qty--" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                                <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
+                                <button @click="if(qty < <?php echo $p['stock']; ?>) qty++; else alert('Max stock')" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
                             </div>
-                            <div class="text-2xl font-black text-escala-green">$<?php echo number_format($p['precio'], 2); ?></div>
+                            <div class="flex flex-col items-start">
+                                <span class="text-sm text-gray-400 line-through font-medium">$<?php echo number_format($p['precio'] * 1.3, 2); ?></span>
+                                <span class="text-3xl font-black text-escala-green">$<?php echo number_format($p['precio'], 2); ?></span>
+                            </div>
                         </div>
 
-                        <div class="flex flex-col gap-2">
+                        <div class="flex flex-col gap-3 w-full">
                             <button @click="addToCart(<?php echo htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8'); ?>, qty); qty = 1" 
-                                    class="btn-add w-full py-3.5 flex items-center justify-center gap-2 shadow-lg">
-                                <i data-lucide="shopping-cart" class="w-4 h-4"></i> AÑADIR AL CARRITO
+                                    class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                                <i data-lucide="shopping-cart" class="w-5 h-5"></i> AÑADIR AL CARRITO
                             </button>
+                            
                             <button @click="openModal(<?php echo htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8'); ?>)" 
-                                    class="btn-outline w-full py-2.5 flex items-center justify-center gap-2">
+                                    class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
                                 <i data-lucide="info" class="w-3 h-3"></i> MÁS INFORMACIÓN
                             </button>
                         </div>
@@ -306,10 +312,10 @@ $nombreCorto = $partesNombre[0];
         <?php endif; ?>
     </main>
 
-    <footer class="bg-white py-10 border-t border-gray-100 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 flex flex-col items-center justify-center">
-            <p class="text-[10px] font-bold text-gray-300 uppercase tracking-[0.3em] mb-4">Powered By</p>
-            <img src="imagenes/KAI_NA.png" alt="KAI Experience" class="h-8 w-auto opacity-40 hover:opacity-100 grayscale hover:grayscale-0 transition-all duration-500">
+    <footer class="bg-gray-60 py-6 border-t-2 border-escala-blue mt-auto">
+        <div class="max-w-[1400px] mx-auto px-4 flex flex-col items-center justify-center">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mb-4">Powered By</p>
+            <img src="imagenes/KAI_NA.png" alt="KAI Experience" class="h-10 w-auto escala-blue">
         </div>
     </footer>
 
@@ -322,71 +328,100 @@ $nombreCorto = $partesNombre[0];
         </button>
     </div>
 
-    <div x-show="cartOpen" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" @click="cartOpen = false" x-cloak></div>
-    <div x-show="cartOpen" class="fixed top-0 right-0 z-50 h-full w-full max-w-xs md:max-w-sm bg-white shadow-2xl transition-transform duration-300 flex flex-col" :class="cartOpen ? 'translate-x-0' : 'translate-x-full'" x-cloak>
-        <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-white">
-            <h2 class="font-black text-xl text-escala-green">TU CARRITO</h2>
-            <button @click="cartOpen = false" class="p-2 hover:bg-gray-100 rounded-full transition-all duration-300 hover:rotate-90 text-gray-500"><i data-lucide="x" class="w-6 h-6"></i></button>
+    <div x-show="cartOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" @click="cartOpen = false" x-cloak x-transition.opacity></div>
+    
+    <div x-show="cartOpen" 
+         class="fixed bottom-28 right-4 z-50 w-[92vw] md:w-full max-w-md bg-white shadow-2xl rounded-3xl overflow-hidden flex flex-col transition-all duration-300 border border-gray-100 max-h-[80vh] h-auto origin-bottom"
+         :class="cartOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-10 opacity-0 scale-95 pointer-events-none'"
+         x-cloak>
+        
+        <div class="p-6 bg-escala-dark flex justify-between items-center shadow-lg shrink-0">
+            <h2 class="font-black text-2xl text-white tracking-wide">TU CARRITO</h2>
+            <button @click="cartOpen = false" class="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-all duration-300 hover:rotate-90 text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
-        <div class="flex-grow overflow-y-auto p-6 space-y-6">
+
+        <div class="flex-grow overflow-y-auto p-6 space-y-6 bg-gray-50">
             <template x-for="item in cart" :key="item.id">
-                <div class="flex gap-4 items-start border-b border-gray-50 pb-4">
-                    <div class="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center shrink-0">
-                        <img :src="item.img" class="max-h-full max-w-full object-contain p-1">
+                <div class="flex gap-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center shrink-0 p-1 border border-gray-100">
+                        <img :src="item.img" class="max-h-full max-w-full object-contain">
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-bold text-xs text-gray-800 uppercase leading-tight mb-1" x-text="item.nombre"></h4>
+                        <h4 class="font-bold text-xs text-slate-800 uppercase leading-tight mb-1 truncate" x-text="item.nombre"></h4>
                         <p class="text-escala-green font-black text-sm" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
-                        <div class="flex items-center gap-2 mt-2">
-                            <button @click="updateQty(item.id, -1)" class="p-1 hover:text-red-500 bg-gray-100 rounded"><i data-lucide="minus" class="w-3 h-3"></i></button>
-                            <span class="text-xs font-bold w-6 text-center" x-text="item.qty"></span>
-                            <button @click="updateQty(item.id, 1)" class="p-1 hover:text-escala-green bg-gray-100 rounded"><i data-lucide="plus" class="w-3 h-3"></i></button>
-                        </div>
+                    </div>
+                    <div class="flex items-center bg-gray-100 rounded-full px-2 py-1 border border-gray-200">
+                        <button @click="updateQty(item.id, -1)" class="p-1 text-gray-500 hover:text-red-500 transition-colors"><i data-lucide="minus" class="w-3 h-3"></i></button>
+                        <span class="text-xs font-black w-6 text-center text-slate-800" x-text="item.qty"></span>
+                        <button @click="updateQty(item.id, 1)" class="p-1 text-gray-500 hover:text-escala-green transition-colors"><i data-lucide="plus" class="w-3 h-3"></i></button>
                     </div>
                 </div>
             </template>
-            <div x-show="cart.length === 0" class="text-center text-gray-400 mt-20">
-                <i data-lucide="shopping-cart" class="w-12 h-12 mx-auto mb-4 opacity-20"></i>
-                <p class="text-sm font-medium">Vacío</p>
+            <div x-show="cart.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
+                <i data-lucide="shopping-cart" class="w-16 h-16 mb-4 opacity-20"></i>
+                <p class="font-bold text-lg">Tu carrito está vacío</p>
             </div>
         </div>
-        <div class="p-6 bg-gray-50 border-t border-gray-200" x-show="cart.length > 0">
+
+        <div class="p-8 bg-white border-t border-gray-100 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1.5)] shrink-0" x-show="cart.length > 0">
             <div class="flex justify-between items-end mb-6">
-                <span class="text-xs font-bold text-gray-500 uppercase">Total a Descontar</span>
-                <span class="font-black text-2xl text-escala-green" x-text="'$' + totalPrice()"></span>
+                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider">Total a Descontar</span>
+                <span class="font-black text-3xl text-escala-green" x-text="'$' + totalPrice()"></span>
             </div>
-            <button @click="iniciarTramite()" class="btn-add w-full py-4 shadow-lg">SOLICITAR PEDIDO</button>
+            <button @click="iniciarTramite()" class="w-full py-4 rounded-xl font-black uppercase tracking-[0.15em] text-sm shadow-xl flex items-center justify-center gap-3 text-white bg-escala-dark hover:bg-escala-green hover:shadow-2xl hover:-translate-y-1 transition-all">
+                <i data-lucide="credit-card" class="w-5 h-5"></i> SOLICITAR PEDIDO
+            </button>
         </div>
     </div>
 
     <template x-if="selectedProduct">
-        <div class="fixed inset-0 z-[60] flex items-center justify-center p-4" x-cloak>
+        <div class="fixed inset-0 z-[60] flex items-center justify-center p-4" x-cloak x-transition.opacity>
             <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="selectedProduct = null"></div>
-            <div class="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]" x-data="{ activeImgModal: 0 }">
-                <div class="w-full md:w-1/2 bg-gray-50 p-8 flex items-center justify-center relative">
-                    <img :src="selectedProduct.imagenes[activeImgModal]" class="max-h-[300px] object-contain mix-blend-multiply">
-                    <button @click="selectedProduct = null" class="absolute top-4 left-4 md:hidden p-2 bg-white rounded-full shadow"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+            
+            <div class="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]" 
+                x-data="{ activeImgModal: 0, modalQty: 1 }">
+                
+                <div class="w-full md:w-1/2 bg-gray-50 p-12 flex items-center justify-center relative group">
+                    <img :src="selectedProduct.imagenes[activeImgModal]" class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
+                    <button @click="selectedProduct = null" class="absolute top-6 left-6 md:hidden p-3 bg-white rounded-full shadow-md text-gray-800 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
                     <template x-if="selectedProduct.imagenes.length > 1">
-                        <div class="absolute inset-0 flex items-center justify-between px-2">
-                            <button @click="activeImgModal = (activeImgModal === 0) ? selectedProduct.imagenes.length - 1 : activeImgModal - 1" class="p-2 bg-white rounded-full shadow hover:text-escala-green"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-                            <button @click="activeImgModal = (activeImgModal === selectedProduct.imagenes.length - 1) ? 0 : activeImgModal + 1" class="p-2 bg-white rounded-full shadow hover:text-escala-green"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                        <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button @click="activeImgModal = (activeImgModal === 0) ? selectedProduct.imagenes.length - 1 : activeImgModal - 1" class="p-3 bg-white rounded-full shadow-lg hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
+                            <button @click="activeImgModal = (activeImgModal === selectedProduct.imagenes.length - 1) ? 0 : activeImgModal + 1" class="p-3 bg-white rounded-full shadow-lg hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-right" class="w-6 h-6"></i></button>
                         </div>
                     </template>
                 </div>
-                <div class="w-full md:w-1/2 p-8 overflow-y-auto">
-                    <div class="flex justify-between items-start">
-                        <h2 class="font-black text-2xl uppercase leading-tight mb-2 text-slate-900" x-text="selectedProduct.nombre"></h2>
-                        <button @click="selectedProduct = null" class="hidden md:block p-2 hover:bg-gray-100 rounded-full transition-all duration-300 hover:rotate-90 text-gray-500"><i data-lucide="x" class="w-6 h-6"></i></button>
+
+                <div class="w-full md:w-1/2 p-10 overflow-y-auto flex flex-col">
+                    <div class="flex justify-between items-start mb-6">
+                        <h2 class="font-black text-3xl uppercase leading-none text-slate-900" x-text="selectedProduct.nombre"></h2>
+                        <button @click="selectedProduct = null" class="hidden md:block p-2 hover:bg-gray-100 rounded-full transition-all duration-300 hover:rotate-90 text-gray-500"><i data-lucide="x" class="w-7 h-7"></i></button>
                     </div>
-                    <div class="h-1 w-20 bg-escala-green mb-6"></div>
-                    <p class="text-gray-600 text-sm mb-8 leading-relaxed" x-text="selectedProduct.descripcion_larga || selectedProduct.descripcion_corta"></p>
-                    <div class="mt-auto">
-                        <div class="flex items-center gap-4 mb-6">
-                            <span class="text-3xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
-                            <span class="text-xs font-bold bg-gray-100 text-gray-500 px-3 py-1 rounded-full uppercase" x-text="'Stock: ' + selectedProduct.stock"></span>
+                    
+                    <div class="flex items-center gap-2 mb-6">
+                        <div class="flex text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i></div>
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wide" x-text="'Stock: ' + selectedProduct.stock"></span>
+                    </div>
+                    
+                    <p class="text-gray-600 text-base mb-8 leading-relaxed font-medium" x-text="selectedProduct.descripcion_larga || selectedProduct.descripcion_corta"></p>
+                    
+                    <div class="mt-auto pt-8 border-t border-gray-100">
+                        <div class="flex items-center justify-between mb-8">
+                            
+                            <div class="flex items-center bg-gray-100 rounded-full px-4 py-2 border border-gray-200">
+                                <button @click="if(modalQty > 1) modalQty--" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">−</button>
+                                <span class="mx-4 font-black text-xl text-slate-800 w-6 text-center" x-text="modalQty"></span>
+                                <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
+                            </div>
+
+                            <div class="text-right">
+                                <span class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio * 1.3).toFixed(2)"></span>
+                                <span class="text-4xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
+                            </div>
                         </div>
-                        <button @click="addToCart(selectedProduct, 1); selectedProduct = null" class="btn-add w-full py-4 shadow-lg flex justify-center gap-2">
-                            <i data-lucide="shopping-cart" class="w-4 h-4"></i> AGREGAR AL PEDIDO
+
+                        <button @click="addToCart(selectedProduct, modalQty); selectedProduct = null" class="btn-add w-full py-5 rounded-2xl font-black text-white uppercase shadow-xl hover:shadow-2xl transition-all flex justify-center gap-3 text-base tracking-wider">
+                            <i data-lucide="shopping-cart" class="w-6 h-6"></i> AGREGAR AL CARRITO
                         </button>
                     </div>
                 </div>

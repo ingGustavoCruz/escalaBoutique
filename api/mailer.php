@@ -19,14 +19,14 @@ function enviarCorreo($destinatario, $asunto, $cuerpoHTML) {
         $mail->isSMTP();
         $mail->Host       = 'smtp.office365.com'; 
         $mail->SMTPAuth   = true;
-        $mail->Username   = 'tucorreo@empresa.com';      // <--- TU CORREO COMPLETO
-        $mail->Password   = 'tu_contraseña_real';        // <--- TU PASS (o App Password)
+        $mail->Username   = 'gustavo.cruz@escala-inc.com';      // <--- TU CORREO COMPLETO
+        $mail->Password   = '22Alambr3$';        // <--- TU PASS (o App Password)
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = 587;
 
         // --- REMITENTE ---
         // En Outlook es OBLIGATORIO que el 'From' sea igual al 'Username' de arriba
-        $mail->setFrom('tucorreo@empresa.com', 'Escala Boutique');
+        $mail->setFrom('gustavo.cruz@escala-inc.com', 'Escala Boutique');
         
         $mail->addAddress($destinatario);
 
