@@ -1,6 +1,6 @@
 <?php
 // api/conexion.php - EscalaBoutique
-$host = 'localhost';
+$host = '127.0.0.1';
 $user = 'root';
 $pass = ''; // Tu pass local
 $db   = 'kaiexper_escalaboutique'; // <--- NUEVA BD

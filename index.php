@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Final Visual (Animaciones, Footer KAI, Tarjetas Estilo Boutique)
+ * Versión: Soporte de Tallas (Logic-Aware)
  */
 session_start();
 error_reporting(E_ALL);
@@ -62,6 +62,8 @@ if ($resultado && $resultado->num_rows > 0) {
         $row['es_top'] = (int)$row['es_top'];
         $row['categoria'] = $row['categoria'] ?? 'General';
         $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
+        // Aseguramos que 'tallas' sea una cadena vacía si es null, para evitar errores en JS
+        $row['tallas'] = $row['tallas'] ?? ''; 
         
         if (!in_array($row['categoria'], $categorias)) {
             $categorias[] = $row['categoria'];
@@ -89,9 +91,10 @@ $nombreCorto = $partesNombre[0];
             theme: {
                 extend: {
                     colors: {
-                        'escala-blue': '#1e3a8a',
-                        'escala-green': '#00524A', 
+                        'escala-green': '#00524A',
+                        'escala-beige': '#AA9482',
                         'escala-dark': '#003d36',
+                        'escala-blue': '#1e3a8a',
                         'escala-alert': '#FF9900',
                     }
                 }
@@ -116,26 +119,76 @@ $nombreCorto = $partesNombre[0];
                     this.$watch('cartOpen', (val) => { if (val) setTimeout(() => lucide.createIcons(), 50); });
                     lucide.createIcons();
                 },
-                openModal(p) { this.selectedProduct = p; },
-                addToCart(p, qty = 1) {
+                openModal(p) { 
+                    this.selectedProduct = JSON.parse(JSON.stringify(p)); // Clonar objeto
+                    this.selectedProduct.sizeSelected = ''; // Resetear talla
+                },
+                
+                // Función AÑADIR AL CARRITO mejorada para Tallas
+                addToCart(p, qty = 1, size = null) {
+                    // Validación de Talla
+                    if (p.tallas && p.tallas.length > 0 && !size) {
+                        alert('Por favor selecciona una talla.');
+                        return;
+                    }
+
                     const qtyNum = parseInt(qty);
-                    const itemInCart = this.cart.find(i => i.id === p.id);
-                    if (itemInCart && (itemInCart.qty + qtyNum) > p.stock) { alert('Stock insuficiente'); return; }
-                    if (itemInCart) { itemInCart.qty += qtyNum; } 
-                    else { this.cart.push({ id: p.id, nombre: p.nombre, precio: p.precio, img: p.imagenes[0], qty: qtyNum, stock: p.stock }); }
+                    
+                    // Buscamos si ya existe el producto con la MISMA ID y la MISMA TALLA
+                    const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
+
+                    if (itemIndex > -1) {
+                        // Ya existe, validamos stock (Global del producto)
+                        if ((this.cart[itemIndex].qty + qtyNum) > p.stock) {
+                            alert('Stock insuficiente.');
+                            return;
+                        }
+                        this.cart[itemIndex].qty += qtyNum;
+                    } else {
+                        // Nuevo item
+                        this.cart.push({
+                            id: p.id,
+                            nombre: p.nombre,
+                            precio: p.precio,
+                            img: p.imagenes[0],
+                            qty: qtyNum,
+                            stock: p.stock,
+                            talla: size // Guardamos la talla seleccionada (o null)
+                        });
+                    }
+
                     this.saveCart();
                     this.showToast = true;
+                    if(this.selectedProduct) this.selectedProduct = null; // Cerrar modal si estaba abierto
                     setTimeout(() => { this.showToast = false; }, 3000);
                 },
-                updateQty(id, delta) {
-                    const item = this.cart.find(i => i.id === id);
-                    if (item && delta > 0 && item.qty >= item.stock) { alert('Límite de stock alcanzado'); return; }
-                    if (item) { item.qty += delta; if (item.qty <= 0) this.cart = this.cart.filter(i => i.id !== id); }
+
+                // Actualizar cantidad usando el Índice del Array (más seguro con tallas)
+                updateQty(index, delta) {
+                    const item = this.cart[index];
+                    if (!item) return;
+
+                    const newQty = item.qty + delta;
+                    
+                    // Validar Stock
+                    if (delta > 0 && newQty > item.stock) {
+                        alert('Límite de stock alcanzado');
+                        return;
+                    }
+
+                    if (newQty <= 0) {
+                        // Eliminar del carrito
+                        this.cart.splice(index, 1);
+                    } else {
+                        item.qty = newQty;
+                    }
                     this.saveCart();
                 },
+
                 saveCart() { localStorage.setItem('cart_escala', JSON.stringify(this.cart)); setTimeout(() => lucide.createIcons(), 50); },
                 totalPrice() { return this.cart.reduce((s, i) => s + (i.precio * i.qty), 0).toFixed(2); },
                 iniciarTramite() { this.cartOpen = false; this.showPayrollModal = true; },
+                
                 confirmarPedidoNomina() {
                     this.isPaying = true;
                     fetch('api/procesar_pedido_nomina.php', {
@@ -168,18 +221,16 @@ $nombreCorto = $partesNombre[0];
         body { font-family: system-ui, -apple-system, sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* Badges */
         .badge-top { background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); color: white; font-weight: 800; padding: 5px 15px; clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); z-index: 10; font-size: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
         .badge-right { color: white; font-weight: 900; padding: 4px 10px 4px 18px; clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); z-index: 10; font-size: 10px; margin-bottom: 4px; text-transform: uppercase; box-shadow: -2px 2px 5px rgba(0,0,0,0.1); }
         .bg-sale { background-color: #FF9900; }
         .bg-last { background-color: #EF4444; }
 
-        /* Botón Estilo Boutique */
         .btn-add { background-color: #00524A; color: white; transition: 0.3s; border-radius: 8px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
         .btn-add:hover { background-color: #003d36; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,82,74,0.3); }
         
-        .btn-outline { background-color: white; border: 1px solid #e5e7eb; color: #6b7280; font-weight: 700; font-size: 10px; text-transform: uppercase; border-radius: 8px; transition: 0.3s; }
-        .btn-outline:hover { border-color: #00524A; color: #00524A; }
+        /* Botón Talla Seleccionado */
+        .size-btn-active { background-color: #00524A; color: white; border-color: #00524A; }
     </style>
 </head>
 
@@ -190,54 +241,28 @@ $nombreCorto = $partesNombre[0];
         <p class="text-sm font-bold">Agregado al carrito</p>
     </div>
 
-    <header class="bg-white pt-4 pb-2 sticky top-0 z-40 border-b border-gray-100 shadow-sm">
+    <header class="bg-escala-green pt-4 pb-2 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
-            
-            <div class="md:hidden flex flex-col gap-3 pb-2">
-                <div class="flex justify-center mb-1">
-                    <img src="imagenes/EscalaBoutique.png" class="h-24 w-auto object-contain">
+            <div class="flex flex-row items-center justify-between gap-6 mb-6">
+                <div class="flex-shrink-0 bg-white/95 p-3 rounded-xl shadow-md">
+                    <img src="imagenes/EscalaBoutiqueCompleto.png" class="h-16 w-auto object-contain">
                 </div>
-                <div class="flex justify-end items-baseline gap-1">
-                    <span class="text-[10px] text-gray-400 font-bold uppercase">HOLA,</span>
-                    <span class="text-xs font-bold text-escala-green"><?php echo $nombreCorto; ?></span>
+                <div class="relative w-full max-w-xl mx-auto hidden md:block">
+                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"></i>
+                    <input type="text" x-model="searchQuery" placeholder="Buscar productos..." class="w-full pl-12 pr-4 py-3 bg-white border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige shadow-lg transition-all text-sm placeholder-gray-400 text-gray-800">
                 </div>
-                <div class="relative w-full">
-                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                    <input type="text" x-model="searchQuery" placeholder="Buscar productos..."
-                           class="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:border-escala-green focus:ring-1 focus:ring-escala-green transition-all text-sm">
+                <div class="flex flex-col items-end text-right">
+                    <span class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">BIENVENIDO</span>
+                    <span class="text-sm font-bold text-escala-beige truncate max-w-[200px]"><?php echo $nombreCompleto; ?></span>
                 </div>
-                <nav class="flex gap-2 overflow-x-auto no-scrollbar">
-                    <?php foreach($categorias as $cat): ?>
-                    <button @click="currentCategory = '<?php echo $cat; ?>'" :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-green text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'" class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all">
-                        <?php echo $cat; ?>
-                    </button>
-                    <?php endforeach; ?>
-                </nav>
             </div>
-
-            <div class="hidden md:block">
-                <div class="flex flex-row items-center justify-between gap-6 mb-6">
-                    <div class="flex-shrink-0">
-                        <img src="imagenes/EscalaBoutiqueCompleto.png" class="h-20 w-auto object-contain">
-                    </div>
-                    <div class="relative w-full max-w-xl mx-auto">
-                        <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                        <input type="text" x-model="searchQuery" placeholder="Buscar productos..."
-                               class="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:border-escala-green focus:ring-1 focus:ring-escala-green transition-all text-sm">
-                    </div>
-                    <div class="flex flex-col items-end text-right">
-                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">BIENVENIDO</span>
-                        <span class="text-sm font-bold text-escala-green truncate max-w-[200px]"><?php echo $nombreCompleto; ?></span>
-                    </div>
-                </div>
-                <nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                    <?php foreach($categorias as $cat): ?>
-                    <button @click="currentCategory = '<?php echo $cat; ?>'" :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-green text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:border-escala-green hover:text-escala-green'" class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all">
-                        <?php echo $cat; ?>
-                    </button>
-                    <?php endforeach; ?>
-                </nav>
-            </div>
+            <nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                <?php foreach($categorias as $cat): ?>
+                <button @click="currentCategory = '<?php echo $cat; ?>'" :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-lg transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300">
+                    <?php echo $cat; ?>
+                </button>
+                <?php endforeach; ?>
+            </nav>
         </div>
     </header>
 
@@ -262,16 +287,11 @@ $nombreCorto = $partesNombre[0];
 
                 <div class="h-72 flex items-center justify-center mb-8 relative p-4">
                     <img :src="imgs[activeImg]" class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
-                    <template x-if="imgs.length > 1">
-                        <div class="absolute inset-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button @click.stop="activeImg = (activeImg === 0) ? imgs.length - 1 : activeImg - 1" class="p-2 bg-white rounded-full shadow-md hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-                            <button @click.stop="activeImg = (activeImg === imgs.length - 1) ? 0 : activeImg + 1" class="p-2 bg-white rounded-full shadow-md hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
-                        </div>
-                    </template>
                 </div>
 
                 <div class="flex flex-col flex-grow items-center text-center">
-                    <h3 class="font-black text-xl text-slate-900 mb-3 uppercase leading-tight line-clamp-2"><?php echo $p['nombre']; ?></h3>
+                    <h3 class="font-black text-xl text-slate-900 mb-2 uppercase leading-tight line-clamp-2"><?php echo $p['nombre']; ?></h3>
+                    <p class="text-xs text-gray-500 font-medium mb-3 px-2 line-clamp-2 min-h-[2.5em] leading-snug"><?php echo !empty($p['descripcion_corta']) ? $p['descripcion_corta'] : ''; ?></p>
                     
                     <div class="flex items-center gap-1 mb-4 justify-center">
                         <?php for($i=1; $i<=5; $i++): $color = ($i <= (int)$p['calificacion']) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'; ?>
@@ -294,9 +314,10 @@ $nombreCorto = $partesNombre[0];
                         </div>
 
                         <div class="flex flex-col gap-3 w-full">
-                            <button @click="addToCart(<?php echo htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8'); ?>, qty); qty = 1" 
+                            <button @click="<?php echo !empty($p['tallas']) ? "openModal(" . htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') . ")" : "addToCart(" . htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') . ", qty)"; ?>" 
                                     class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                                <i data-lucide="shopping-cart" class="w-5 h-5"></i> AÑADIR AL CARRITO
+                                <i data-lucide="shopping-cart" class="w-5 h-5"></i> 
+                                <?php echo !empty($p['tallas']) ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO'; ?>
                             </button>
                             
                             <button @click="openModal(<?php echo htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8'); ?>)" 
@@ -331,45 +352,48 @@ $nombreCorto = $partesNombre[0];
     <div x-show="cartOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" @click="cartOpen = false" x-cloak x-transition.opacity></div>
     
     <div x-show="cartOpen" 
-         class="fixed bottom-28 right-4 z-50 w-[92vw] md:w-full max-w-md bg-white shadow-2xl rounded-3xl overflow-hidden flex flex-col transition-all duration-300 border border-gray-100 max-h-[80vh] h-auto origin-bottom"
+         class="fixed bottom-28 right-4 z-50 w-72 bg-white shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-300 border border-gray-100 max-h-[60vh] h-auto origin-bottom"
          :class="cartOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-10 opacity-0 scale-95 pointer-events-none'"
          x-cloak>
         
-        <div class="p-6 bg-escala-dark flex justify-between items-center shadow-lg shrink-0">
-            <h2 class="font-black text-2xl text-white tracking-wide">TU CARRITO</h2>
-            <button @click="cartOpen = false" class="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-all duration-300 hover:rotate-90 text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+        <div class="p-3 bg-escala-dark flex justify-between items-center shadow-md shrink-0">
+            <h2 class="font-bold text-xs text-white tracking-widest uppercase">Tu Carrito</h2>
+            <button @click="cartOpen = false" class="p-1 bg-white/20 hover:bg-white/30 rounded-full transition-all duration-300 hover:rotate-90 text-white"><i data-lucide="x" class="w-3 h-3"></i></button>
         </div>
 
-        <div class="flex-grow overflow-y-auto p-6 space-y-6 bg-gray-50">
-            <template x-for="item in cart" :key="item.id">
-                <div class="flex gap-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                    <div class="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center shrink-0 p-1 border border-gray-100">
+        <div class="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50">
+            <template x-for="(item, index) in cart" :key="index">
+                <div class="flex gap-2 items-center bg-white p-2 rounded-lg shadow-sm border border-gray-100 relative group">
+                    <div class="w-10 h-10 bg-white rounded flex items-center justify-center shrink-0 p-0.5 border border-gray-100">
                         <img :src="item.img" class="max-h-full max-w-full object-contain">
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-bold text-xs text-slate-800 uppercase leading-tight mb-1 truncate" x-text="item.nombre"></h4>
-                        <p class="text-escala-green font-black text-sm" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
+                        <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
+                        <template x-if="item.talla">
+                             <span class="text-[9px] font-bold text-gray-500 bg-gray-100 px-1 rounded" x-text="'Talla: ' + item.talla"></span>
+                        </template>
+                        <p class="text-escala-green font-black text-xs" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
                     </div>
-                    <div class="flex items-center bg-gray-100 rounded-full px-2 py-1 border border-gray-200">
-                        <button @click="updateQty(item.id, -1)" class="p-1 text-gray-500 hover:text-red-500 transition-colors"><i data-lucide="minus" class="w-3 h-3"></i></button>
-                        <span class="text-xs font-black w-6 text-center text-slate-800" x-text="item.qty"></span>
-                        <button @click="updateQty(item.id, 1)" class="p-1 text-gray-500 hover:text-escala-green transition-colors"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                    <div class="flex items-center bg-gray-50 rounded-md px-1 py-0.5 border border-gray-100">
+                        <button @click="updateQty(index, -1)" class="p-1 text-gray-400 hover:text-red-500 transition-colors"><i data-lucide="minus" class="w-3 h-3"></i></button>
+                        <span class="text-[10px] font-black w-5 text-center text-slate-800" x-text="item.qty"></span>
+                        <button @click="updateQty(index, 1)" class="p-1 text-gray-400 hover:text-escala-green transition-colors"><i data-lucide="plus" class="w-3 h-3"></i></button>
                     </div>
                 </div>
             </template>
-            <div x-show="cart.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
-                <i data-lucide="shopping-cart" class="w-16 h-16 mb-4 opacity-20"></i>
-                <p class="font-bold text-lg">Tu carrito está vacío</p>
+            <div x-show="cart.length === 0" class="flex flex-col items-center justify-center py-8 text-gray-300">
+                <i data-lucide="shopping-bag" class="w-8 h-8 mb-2 opacity-50"></i>
+                <p class="font-bold text-[10px] uppercase">Carrito vacío</p>
             </div>
         </div>
 
-        <div class="p-8 bg-white border-t border-gray-100 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1.5)] shrink-0" x-show="cart.length > 0">
-            <div class="flex justify-between items-end mb-6">
-                <span class="text-sm font-bold text-gray-400 uppercase tracking-wider">Total a Descontar</span>
-                <span class="font-black text-3xl text-escala-green" x-text="'$' + totalPrice()"></span>
+        <div class="p-3 bg-white border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0" x-show="cart.length > 0">
+            <div class="flex justify-between items-end mb-2">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</span>
+                <span class="font-black text-base text-escala-green" x-text="'$' + totalPrice()"></span>
             </div>
-            <button @click="iniciarTramite()" class="w-full py-4 rounded-xl font-black uppercase tracking-[0.15em] text-sm shadow-xl flex items-center justify-center gap-3 text-white bg-escala-dark hover:bg-escala-green hover:shadow-2xl hover:-translate-y-1 transition-all">
-                <i data-lucide="credit-card" class="w-5 h-5"></i> SOLICITAR PEDIDO
+            <button @click="iniciarTramite()" class="w-full py-2 rounded-lg font-bold uppercase tracking-widest text-[10px] shadow-sm flex items-center justify-center gap-2 text-white bg-escala-dark hover:bg-escala-green hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <i data-lucide="credit-card" class="w-3 h-3"></i> Finalizar Compra
             </button>
         </div>
     </div>
@@ -398,29 +422,47 @@ $nombreCorto = $partesNombre[0];
                         <button @click="selectedProduct = null" class="hidden md:block p-2 hover:bg-gray-100 rounded-full transition-all duration-300 hover:rotate-90 text-gray-500"><i data-lucide="x" class="w-7 h-7"></i></button>
                     </div>
                     
-                    <div class="flex items-center gap-2 mb-6">
-                        <div class="flex text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i></div>
-                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wide" x-text="'Stock: ' + selectedProduct.stock"></span>
+                    <div class="mb-6 space-y-4">
+                        <div class="flex items-center gap-2">
+                            <div class="flex text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i></div>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wide" x-text="'Stock: ' + selectedProduct.stock"></span>
+                        </div>
+
+                        <template x-if="selectedProduct.tallas && selectedProduct.tallas.length > 0">
+                            <div>
+                                <p class="text-xs font-bold text-slate-800 uppercase mb-2">Selecciona Talla:</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="talla in selectedProduct.tallas.split(',')" :key="talla">
+                                        <button @click="selectedProduct.sizeSelected = talla"
+                                                class="px-4 py-2 rounded-lg border font-bold text-sm transition-all"
+                                                :class="selectedProduct.sizeSelected === talla ? 'size-btn-active shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-escala-green'"
+                                                x-text="talla">
+                                        </button>
+                                    </template>
+                                </div>
+                                <p x-show="!selectedProduct.sizeSelected" class="text-[10px] text-red-500 font-bold mt-1">* Requerido</p>
+                            </div>
+                        </template>
                     </div>
                     
                     <p class="text-gray-600 text-base mb-8 leading-relaxed font-medium" x-text="selectedProduct.descripcion_larga || selectedProduct.descripcion_corta"></p>
                     
                     <div class="mt-auto pt-8 border-t border-gray-100">
                         <div class="flex items-center justify-between mb-8">
-                            
                             <div class="flex items-center bg-gray-100 rounded-full px-4 py-2 border border-gray-200">
                                 <button @click="if(modalQty > 1) modalQty--" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">−</button>
                                 <span class="mx-4 font-black text-xl text-slate-800 w-6 text-center" x-text="modalQty"></span>
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
-
                             <div class="text-right">
                                 <span class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio * 1.3).toFixed(2)"></span>
                                 <span class="text-4xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
                             </div>
                         </div>
 
-                        <button @click="addToCart(selectedProduct, modalQty); selectedProduct = null" class="btn-add w-full py-5 rounded-2xl font-black text-white uppercase shadow-xl hover:shadow-2xl transition-all flex justify-center gap-3 text-base tracking-wider">
+                        <button @click="addToCart(selectedProduct, modalQty, selectedProduct.sizeSelected)" 
+                                class="btn-add w-full py-5 rounded-2xl font-black text-white uppercase shadow-xl hover:shadow-2xl transition-all flex justify-center gap-3 text-base tracking-wider"
+                                :class="(selectedProduct.tallas && !selectedProduct.sizeSelected) ? 'opacity-50 cursor-not-allowed' : ''">
                             <i data-lucide="shopping-cart" class="w-6 h-6"></i> AGREGAR AL CARRITO
                         </button>
                     </div>
@@ -443,7 +485,6 @@ $nombreCorto = $partesNombre[0];
                     Monto total a descontar: <br>
                     <span class="font-black text-2xl text-escala-green" x-text="'$' + totalPrice()"></span>
                 </p>
-                <p class="text-xs font-bold text-gray-400 uppercase mb-3">Selecciona plazos de pago:</p>
                 <div class="flex gap-3 justify-center mb-8">
                     <button @click="plazos = 1" :class="plazos === 1 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="flex-1 py-3 rounded-lg flex flex-col items-center justify-center transition-all">
                         <span class="font-black text-lg">1</span><span class="text-[9px] uppercase font-bold">Qna</span>
@@ -472,6 +513,5 @@ $nombreCorto = $partesNombre[0];
             <p class="text-gray-500 font-medium">Recibirás un correo con los detalles.</p>
         </div>
     </div>
-
 </body>
 </html>
