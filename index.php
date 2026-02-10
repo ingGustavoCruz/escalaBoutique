@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Frontend Final (UX/UI Polish + Torito Loader)
+ * Versión: Fix Modal Trigger & Imagen Rota Persistente
  */
 session_start();
 error_reporting(E_ALL);
@@ -55,7 +55,17 @@ $categorias = ['todos'];
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
-        $row['imagenes'] = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : [''];
+        // Filtrar rutas vacías
+        $imgsRaw = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : [];
+        $row['imagenes'] = array_values(array_filter($imgsRaw, function($value) {
+            return !is_null($value) && $value !== ''; 
+        }));
+        
+        // Si después del filtro no hay imágenes, inicializamos vacío
+        if (empty($row['imagenes'])) {
+            $row['imagenes'] = []; 
+        }
+
         $row['precio'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
         $row['stock'] = (int)$row['stock'];
@@ -105,7 +115,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         function appData() {
             return {
                 products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
-                isLoading: true, // Estado para el Loader Torito
+                isLoading: true,
                 currentCategory: 'todos',
                 searchQuery: '',
                 cartOpen: false,
@@ -115,11 +125,10 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 showSuccess: false,
                 showPayrollModal: false,
                 plazos: 1,
-                userMenuOpen: false, // Para el menú desplegable del usuario
+                userMenuOpen: false,
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
                 init() {
-                    // Simulación de carga para mostrar el Torito Loader
                     setTimeout(() => {
                         this.isLoading = false;
                         setTimeout(() => lucide.createIcons(), 50);
@@ -146,10 +155,12 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 openModal(p) { 
                     this.selectedProduct = JSON.parse(JSON.stringify(p)); 
                     this.selectedProduct.sizeSelected = ''; 
+                    // Asegurar que empezamos en la imagen 0
+                    this.activeImgModal = 0; 
                 },
 
                 addToCart(p, qty = 1, size = null) {
-                    if (p.stock === 0) return; // Validación extra
+                    if (p.stock === 0) return;
                     
                     if (p.tallas && p.tallas.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
@@ -165,11 +176,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         }
                         this.cart[itemIndex].qty += qtyNum;
                     } else {
+                        // Si no hay imagen, usar Torito
+                        let imgUrl = (p.imagenes && p.imagenes.length > 0 && p.imagenes[0]) ? p.imagenes[0] : 'imagenes/torito.png';
+                        
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
                             precio: p.precio,
-                            img: p.imagenes[0] || 'imagenes/torito.png',
+                            img: imgUrl,
                             qty: qtyNum,
                             stock: p.stock,
                             talla: size
@@ -203,7 +217,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                 confirmarPedidoNomina() {
                     this.isPaying = true;
-                    fetch('api/procesar_pedido_nomina.php', { // Este endpoint lo crearemos pronto
+                    fetch('api/procesar_pedido_nomina.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ cart: this.cart, total: this.totalPrice(), plazos: this.plazos })
@@ -221,7 +235,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             alert('Error: ' + data.message);
                         }
                     })
-                    .catch(err => { this.isPaying = false; alert('Error de conexión o API no implementada aún.'); });
+                    .catch(err => { this.isPaying = false; alert('Error de conexión o API no implementada.'); });
                 }
             }
         }
@@ -269,8 +283,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         </button>
                         <div x-show="userMenuOpen" x-transition class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
                             <a href="mis_pedidos.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-escala-green font-bold"><i data-lucide="package" class="inline w-4 h-4 mr-2"></i> Mis Pedidos</a>
-                            <div class="border-t border-gray-100 my-1"></div>
-                            <a href="logout.php" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-bold"><i data-lucide="log-out" class="inline w-4 h-4 mr-2"></i> Cerrar Sesión</a>
                         </div>
                     </div>
                 </div>
@@ -290,8 +302,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     </button>
                      <div x-show="userMenuOpen" x-transition class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
                         <a href="mis_pedidos.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-escala-green font-bold"><i data-lucide="package" class="inline w-4 h-4 mr-2"></i> Mis Pedidos</a>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <a href="logout.php" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-bold"><i data-lucide="log-out" class="inline w-4 h-4 mr-2"></i> Cerrar Sesión</a>
                     </div>
                 </div>
 
@@ -329,16 +339,33 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="absolute top-4 left-0" x-show="p.es_top == 1 && p.stock > 0">
                         <div class="badge-top">TOP VENTAS</div>
                     </div>
-                    <div class="absolute top-4 right-0 flex flex-col items-end space-y-2">
+                    <div class="absolute top-4 right-0 flex flex-col items-end space-y-2 z-20">
                          <div x-show="p.stock <= 5 && p.stock > 0" class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div>
                          <div x-show="p.en_oferta == 1 && p.stock > 0" class="badge-right bg-sale">EN OFERTA</div>
                          <div x-show="p.stock === 0" class="badge-right bg-gray-500">AGOTADO</div>
                     </div>
 
-                    <div class="h-72 flex items-center justify-center mb-8 relative p-4 cursor-pointer" @click="if(p.stock > 0) openModal(p)">
-                        <img :src="p.imagenes[activeImg] || 'imagenes/torito.png'" 
-                             onerror="this.onerror=null; this.src='imagenes/torito.png';"
-                             class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
+                    <div class="h-72 flex items-center justify-center mb-8 relative p-4">
+                        
+                        <div class="w-full h-full flex items-center justify-center">
+                             <img :src="(p.imagenes && p.imagenes.length > 0 && p.imagenes[activeImg]) ? p.imagenes[activeImg] : 'imagenes/torito.png'" 
+                                 onerror="this.onerror=null; this.src='imagenes/torito.png';"
+                                 class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
+                        </div>
+
+                        <template x-if="p.imagenes && p.imagenes.length > 1">
+                            <div class="absolute inset-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                                <button @click.stop="activeImg = (activeImg === 0) ? p.imagenes.length - 1 : activeImg - 1" 
+                                        class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110">
+                                    <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                                </button>
+                                <button @click.stop="activeImg = (activeImg === p.imagenes.length - 1) ? 0 : activeImg + 1" 
+                                        class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110">
+                                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </template>
+
                     </div>
 
                     <div class="flex flex-col flex-grow items-center text-center">
@@ -360,7 +387,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                         <div class="mt-auto w-full">
                             <div class="flex items-center justify-center gap-4 mb-8">
-                                <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner" :class="{'opacity-50': p.stock === 0}">
+                                 <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner" :class="{'opacity-50': p.stock === 0}">
                                     <button @click="if(qty > 1) qty--" :disabled="p.stock===0" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
                                     <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
                                     <button @click="if(qty < p.stock) qty++; else if(p.stock>0) alert('Max stock')" :disabled="p.stock===0" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
@@ -372,7 +399,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                           x-text="'$' + (p.precio_anterior > 0 ? p.precio_anterior.toFixed(2) : (p.precio * 1.3).toFixed(2))">
                                     </span>
                                     <span class="text-3xl font-black text-escala-green" x-text="'$' + p.precio.toFixed(2)"></span>
-                                    
                                     <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">
                                         Desde $<span x-text="(p.precio/3).toFixed(2)"></span> /qna
                                     </span>
@@ -401,7 +427,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <i data-lucide="package" class="w-16 h-16 mb-4 opacity-50"></i>
                 <p class="font-medium text-lg">No se encontraron productos.</p>
             </div>
-
         </div>
     </main>
 
@@ -422,22 +447,19 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
     </div>
 
     <div x-show="cartOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" @click="cartOpen = false" x-cloak x-transition.opacity></div>
-    
     <div x-show="cartOpen" 
          class="fixed bottom-28 right-4 z-50 w-72 bg-white shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-300 border border-gray-100 max-h-[60vh] h-auto origin-bottom"
          :class="cartOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-10 opacity-0 scale-95 pointer-events-none'"
          x-cloak>
-        
         <div class="p-3 bg-escala-dark flex justify-between items-center shadow-md shrink-0">
             <h2 class="font-bold text-xs text-white tracking-widest uppercase">Tu Carrito</h2>
             <button @click="cartOpen = false" class="p-1 bg-white/20 hover:bg-white/30 rounded-full transition-all duration-300 hover:rotate-90 text-white"><i data-lucide="x" class="w-3 h-3"></i></button>
         </div>
-
         <div class="flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50">
             <template x-for="(item, index) in cart" :key="index">
                 <div class="flex gap-2 items-center bg-white p-2 rounded-lg shadow-sm border border-gray-100 relative group">
                     <div class="w-10 h-10 bg-white rounded flex items-center justify-center shrink-0 p-0.5 border border-gray-100">
-                        <img :src="item.img" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
+                         <img :src="item.img" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
@@ -458,7 +480,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <p class="font-bold text-[10px] uppercase">Carrito vacío</p>
             </div>
         </div>
-
         <div class="p-3 bg-white border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0" x-show="cart.length > 0">
             <div class="flex justify-between items-end mb-2">
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</span>
@@ -478,13 +499,15 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 x-data="{ activeImgModal: 0, modalQty: 1 }">
                 
                 <div class="w-full md:w-1/2 bg-gray-50 p-12 flex items-center justify-center relative group">
-                    <img :src="selectedProduct.imagenes[activeImgModal] || 'imagenes/torito.png'" 
+                    <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) 
+                                ? selectedProduct.imagenes[activeImgModal] 
+                                : 'imagenes/torito.png'" 
                          onerror="this.onerror=null; this.src='imagenes/torito.png';"
                          class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
                     
                     <button @click="selectedProduct = null" class="absolute top-6 left-6 md:hidden p-3 bg-white rounded-full shadow-md text-gray-800 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
                     
-                    <template x-if="selectedProduct.imagenes.length > 1">
+                    <template x-if="selectedProduct.imagenes && selectedProduct.imagenes.length > 1">
                         <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button @click="activeImgModal = (activeImgModal === 0) ? selectedProduct.imagenes.length - 1 : activeImgModal - 1" class="p-3 bg-white rounded-full shadow-lg hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
                             <button @click="activeImgModal = (activeImgModal === selectedProduct.imagenes.length - 1) ? 0 : activeImgModal + 1" class="p-3 bg-white rounded-full shadow-lg hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-right" class="w-6 h-6"></i></button>
@@ -536,7 +559,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <span class="mx-4 font-black text-xl text-slate-800 w-6 text-center" x-text="modalQty"></span>
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
-
                             <div class="text-right">
                                 <span x-show="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0" 
                                       class="text-sm text-gray-400 line-through font-medium block" 
