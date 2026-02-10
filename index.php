@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Gold Master (Frontend + Backend Sync + Realtime Stock)
+ * Versión: Producción (Soporte Variantes + Triggers + Stock Realtime)
  */
 session_start();
 error_reporting(E_ALL);
@@ -42,11 +42,16 @@ if (isset($_SESSION['usuario_empleado'])) {
     }
 }
 
-// --- 2. CARGA INICIAL DE PRODUCTOS ---
+// --- 2. CARGA PRODUCTOS CON VARIANTES ---
 $conn->query("SET SESSION group_concat_max_len = 10000;");
-$query = "SELECT p.*, GROUP_CONCAT(i.url_imagen ORDER BY i.es_principal DESC, i.id ASC) as lista_imagenes 
+
+// Query avanzada: Trae producto, imágenes y desglose de tallas/stock en un solo viaje
+$query = "SELECT p.*, 
+          GROUP_CONCAT(DISTINCT i.url_imagen ORDER BY i.es_principal DESC, i.id ASC) as lista_imagenes,
+          GROUP_CONCAT(DISTINCT CONCAT(it.talla, ':', it.stock) ORDER BY it.id ASC) as lista_tallas_stock
           FROM productos p 
           LEFT JOIN imagenes_productos i ON p.id = i.producto_id 
+          LEFT JOIN inventario_tallas it ON p.id = it.producto_id
           GROUP BY p.id";
 
 $resultado = $conn->query($query);
@@ -55,21 +60,30 @@ $categorias = ['todos'];
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
-        // Filtrar rutas vacías
+        // Imágenes
         $imgsRaw = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : [];
-        $row['imagenes'] = array_values(array_filter($imgsRaw, function($value) {
-            return !is_null($value) && $value !== ''; 
-        }));
-        
+        $row['imagenes'] = array_values(array_filter($imgsRaw, function($v){ return !is_null($v) && $v !== ''; }));
         if (empty($row['imagenes'])) { $row['imagenes'] = []; }
 
+        // Variantes (Tallas y sus Stocks)
+        $row['variantes'] = []; 
+        if ($row['lista_tallas_stock']) {
+            $pares = explode(',', $row['lista_tallas_stock']);
+            foreach ($pares as $par) {
+                list($t, $s) = explode(':', $par);
+                $row['variantes'][] = ['talla' => $t, 'stock' => (int)$s];
+            }
+        }
+
+        // Datos numéricos
         $row['precio'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
-        $row['stock'] = (int)$row['stock']; // Stock inicial (foto del momento)
+        $row['stock'] = (int)$row['stock']; // Este ya viene actualizado por el Trigger en BD
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
-        $row['tallas'] = $row['tallas'] ?? '';
+        $row['tallas'] = $row['tallas'] ?? ''; // Mantenemos por compatibilidad, aunque usamos variantes ahora
         
+        // Categoría
         $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
         $catClean = empty($catClean) ? 'general' : $catClean;
         $row['categoria_normalizada'] = $catClean;
@@ -126,53 +140,39 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
                 init() {
-                    // Loader inicial
+                    // Loader
                     setTimeout(() => {
                         this.isLoading = false;
                         setTimeout(() => lucide.createIcons(), 50);
                     }, 800);
 
-                    // Watchers visuales
+                    // Watchers
                     this.$watch('selectedProduct', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('cartOpen', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('currentCategory', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('searchQuery', () => setTimeout(() => lucide.createIcons(), 100));
 
-                    // --- NUEVO: POLLING DE STOCK (CADA 10 SEGUNDOS) ---
-                    setInterval(() => {
-                        this.sincronizarStock();
-                    }, 10000);
+                    // Polling Stock (Cada 10s)
+                    setInterval(() => { this.sincronizarStock(); }, 10000);
                 },
 
-                // --- NUEVO: FUNCION DE SINCRONIZACIÓN SILENCIOSA ---
                 sincronizarStock() {
                     fetch('api/obtener_stock.php')
-                        .then(res => {
-                            if (!res.ok) throw new Error('API no disponible');
-                            return res.json();
-                        })
+                        .then(res => { if(!res.ok) throw new Error(); return res.json(); })
                         .then(data => {
                             data.forEach(itemFresco => {
-                                // Buscamos el producto en memoria local
                                 let productoLocal = this.products.find(p => p.id === itemFresco.id);
-                                if (productoLocal) {
-                                    // Si el stock cambió en BD, actualizamos la vista
-                                    if (productoLocal.stock !== itemFresco.stock) {
-                                        productoLocal.stock = itemFresco.stock;
-                                    }
+                                if (productoLocal && productoLocal.stock !== itemFresco.stock) {
+                                    productoLocal.stock = itemFresco.stock;
                                 }
                             });
                         })
-                        .catch(err => {
-                            // Silencioso: no molestamos al usuario si falla el polling
-                            // console.warn("Sincronización de stock pausada:", err);
-                        });
+                        .catch(() => {});
                 },
 
                 get filteredProducts() {
                     const q = this.searchQuery.toLowerCase().trim();
                     const cat = this.currentCategory;
-
                     return this.products.filter(p => {
                         const categoryMatch = (cat === 'todos' || p.categoria_normalizada === cat);
                         const nameMatch = p.nombre.toLowerCase().includes(q);
@@ -190,11 +190,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 addToCart(p, qty = 1, size = null) {
                     if (p.stock === 0) return;
                     
-                    if (p.tallas && p.tallas.length > 0 && !size) {
+                    // Validación de Variantes (Si tiene variantes, exige talla)
+                    if (p.variantes && p.variantes.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
                         return;
                     }
+                    
                     const qtyNum = parseInt(qty);
+                    // Clave única del carrito: ID + Talla
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
 
                     if (itemIndex > -1) {
@@ -204,8 +207,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         }
                         this.cart[itemIndex].qty += qtyNum;
                     } else {
-                        let imgUrl = (p.imagenes && p.imagenes.length > 0 && p.imagenes[0]) ? p.imagenes[0] : 'imagenes/torito.png';
-                        
+                        let imgUrl = (p.imagenes && p.imagenes.length > 0) ? p.imagenes[0] : 'imagenes/torito.png';
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
@@ -256,16 +258,13 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         if (data.status === 'success') {
                             this.showSuccess = true;
                             
-                            // --- NUEVO: ACTUALIZACIÓN OPTIMISTA DEL STOCK LOCAL ---
-                            // Restamos inmediatamente lo que se acaba de comprar para no esperar al polling
+                            // Actualización Optimista de Stock
                             this.cart.forEach(itemCart => {
                                 let productEnTienda = this.products.find(p => p.id === itemCart.id);
                                 if (productEnTienda) {
-                                    // Restamos stock, asegurando que no baje de 0
                                     productEnTienda.stock = Math.max(0, productEnTienda.stock - itemCart.qty);
                                 }
                             });
-                            // -----------------------------------------------------
 
                             this.cart = [];
                             this.saveCart();
@@ -276,7 +275,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     })
                     .catch(err => { 
                         this.isPaying = false; 
-                        alert('Error de conexión con el servidor.'); 
+                        alert('Error de conexión.'); 
                         console.error(err);
                     });
                 }
@@ -447,12 +446,15 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             </div>
 
                             <div class="flex flex-col gap-3 w-full">
-                                <button @click="if(p.stock > 0) { (!p.tallas || p.tallas.length === 0) ? addToCart(p, qty) : openModal(p) }" 
+                                <button @click="if(p.stock > 0) { (!p.variantes || p.variantes.length === 0) ? addToCart(p, qty) : openModal(p) }" 
                                         class="w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all"
-                                        :class="p.stock === 0 ? 'bg-gray-400 cursor-not-allowed text-white' : 'btn-add'"
+                                        :class="p.stock === 0 ? 'bg-gray-400 cursor-not-allowed text-white shadow-none' : 'btn-add'"
                                         :disabled="p.stock === 0">
-                                    <i data-lucide="shopping-cart" class="w-5 h-5"></i>
-                                    <span x-text="p.stock === 0 ? 'AGOTADO' : (p.tallas && p.tallas.length > 0 ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO')"></span>
+                                    
+                                    <i x-show="p.stock > 0" data-lucide="shopping-cart" class="w-5 h-5"></i>
+                                    <i x-show="p.stock === 0" data-lucide="x-circle" class="w-5 h-5"></i>
+                                    
+                                    <span x-text="p.stock === 0 ? 'AGOTADO' : (p.variantes && p.variantes.length > 0 ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO')"></span>
                                 </button>
                                 
                                 <button @click="openModal(p)" class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
@@ -574,15 +576,35 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                   x-text="selectedProduct.stock > 0 ? 'Stock: ' + selectedProduct.stock : '¡AGOTADO!'"></span>
                         </div>
 
-                        <template x-if="selectedProduct.tallas && selectedProduct.tallas.length > 0">
+                        <template x-if="selectedProduct.variantes && selectedProduct.variantes.length > 0">
                             <div>
-                                <p class="text-xs font-bold text-slate-800 uppercase mb-2">Selecciona Talla:</p>
+                                <div class="flex justify-between items-end mb-2">
+                                    <p class="text-xs font-bold text-slate-800 uppercase">Selecciona Talla:</p>
+                                    <template x-if="selectedProduct.sizeSelected">
+                                        <span class="text-[10px] font-bold text-escala-green" 
+                                              x-text="'Disponibles: ' + (selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected)?.stock || 0)">
+                                        </span>
+                                    </template>
+                                </div>
+
                                 <div class="flex flex-wrap gap-2">
-                                    <template x-for="talla in selectedProduct.tallas.split(',')" :key="talla">
-                                        <button @click="selectedProduct.sizeSelected = talla"
-                                                class="px-4 py-2 rounded-lg border font-bold text-sm transition-all"
-                                                :class="selectedProduct.sizeSelected === talla ? 'size-btn-active shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-escala-green'"
-                                                x-text="talla">
+                                    <template x-for="v in selectedProduct.variantes" :key="v.talla">
+                                        <button @click="if(v.stock > 0) { selectedProduct.sizeSelected = v.talla; modalQty = 1; }"
+                                                class="px-4 py-2 rounded-lg border font-bold text-sm transition-all relative overflow-hidden"
+                                                :class="{
+                                                    'size-btn-active shadow-md': selectedProduct.sizeSelected === v.talla,
+                                                    'bg-white text-gray-500 border-gray-200 hover:border-escala-green': selectedProduct.sizeSelected !== v.talla && v.stock > 0,
+                                                    'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed': v.stock === 0
+                                                }"
+                                                :disabled="v.stock === 0">
+                                                
+                                            <span x-text="v.talla"></span>
+                                            
+                                            <template x-if="v.stock === 0">
+                                                <div class="absolute inset-0 flex items-center justify-center bg-white/50">
+                                                    <div class="w-full h-[1px] bg-red-300 rotate-45 transform"></div>
+                                                </div>
+                                            </template>
                                         </button>
                                     </template>
                                 </div>
@@ -613,9 +635,10 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                         <button @click="addToCart(selectedProduct, modalQty, selectedProduct.sizeSelected)" 
                                 class="w-full py-5 rounded-2xl font-black text-white uppercase shadow-xl hover:shadow-2xl transition-all flex justify-center gap-3 text-base tracking-wider"
-                                :class="(selectedProduct.stock === 0 || (selectedProduct.tallas && !selectedProduct.sizeSelected)) ? 'bg-gray-400 cursor-not-allowed' : 'btn-add'"
-                                :disabled="selectedProduct.stock === 0 || (selectedProduct.tallas && !selectedProduct.sizeSelected)">
-                            <i data-lucide="shopping-cart" class="w-6 h-6"></i> 
+                                :class="(selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected)) ? 'bg-gray-400 cursor-not-allowed' : 'btn-add'"
+                                :disabled="selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected)">
+                            <i x-show="selectedProduct.stock > 0" data-lucide="shopping-cart" class="w-6 h-6"></i> 
+                            <i x-show="selectedProduct.stock === 0" data-lucide="x-circle" class="w-6 h-6"></i> 
                             <span x-text="selectedProduct.stock === 0 ? 'AGOTADO' : 'AGREGAR AL CARRITO'"></span>
                         </button>
                     </div>
@@ -631,7 +654,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
             <div x-show="isPaying">
                 <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-escala-green mx-auto mb-4"></div>
                 <h3 class="font-bold text-lg text-slate-800">Procesando...</h3>
-                <p class="text-xs text-gray-500">Enviando solicitud a Escala Boutique</p>
+                <p class="text-xs text-gray-500">Enviando solicitud a Recursos Humanos</p>
             </div>
 
             <div x-show="!isPaying">
