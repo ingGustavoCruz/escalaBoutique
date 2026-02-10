@@ -1,13 +1,16 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción (Soporte Variantes + Triggers + Stock Realtime)
+ * Versión: Producción (Soporte Variantes + Triggers + Stock Realtime + Cupones)
  */
 session_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 0); 
 
 require_once 'api/conexion.php';
+
+// --- 0. LÓGICA CUPONES (Backend) ---
+$cupon_activo = $_SESSION['cupon_activo'] ?? null;
 
 // --- 1. LOGIN SILENCIOSO ---
 $es_local = ($_SERVER['SERVER_NAME'] === 'localhost' || $_SERVER['SERVER_NAME'] === '127.0.0.1');
@@ -45,7 +48,6 @@ if (isset($_SESSION['usuario_empleado'])) {
 // --- 2. CARGA PRODUCTOS CON VARIANTES ---
 $conn->query("SET SESSION group_concat_max_len = 10000;");
 
-// Query avanzada: Trae producto, imágenes y desglose de tallas/stock en un solo viaje
 $query = "SELECT p.*, 
           GROUP_CONCAT(DISTINCT i.url_imagen ORDER BY i.es_principal DESC, i.id ASC) as lista_imagenes,
           GROUP_CONCAT(DISTINCT CONCAT(it.talla, ':', it.stock) ORDER BY it.id ASC) as lista_tallas_stock
@@ -65,7 +67,7 @@ if ($resultado && $resultado->num_rows > 0) {
         $row['imagenes'] = array_values(array_filter($imgsRaw, function($v){ return !is_null($v) && $v !== ''; }));
         if (empty($row['imagenes'])) { $row['imagenes'] = []; }
 
-        // Variantes (Tallas y sus Stocks)
+        // Variantes
         $row['variantes'] = []; 
         if ($row['lista_tallas_stock']) {
             $pares = explode(',', $row['lista_tallas_stock']);
@@ -77,11 +79,12 @@ if ($resultado && $resultado->num_rows > 0) {
 
         // Datos numéricos
         $row['precio'] = (float)$row['precio'];
+        $row['precio_base'] = (float)$row['precio']; // Guardamos precio original para cálculos
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
-        $row['stock'] = (int)$row['stock']; // Este ya viene actualizado por el Trigger en BD
+        $row['stock'] = (int)$row['stock'];
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
-        $row['tallas'] = $row['tallas'] ?? ''; // Mantenemos por compatibilidad, aunque usamos variantes ahora
+        $row['tallas'] = $row['tallas'] ?? '';
         
         // Categoría
         $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
@@ -126,6 +129,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         function appData() {
             return {
                 products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
+                coupon: <?php echo json_encode($cupon_activo); ?>, // Cupón inyectado desde PHP
+                couponCodeInput: '',
                 isLoading: true,
                 currentCategory: 'todos',
                 searchQuery: '',
@@ -154,6 +159,37 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                     // Polling Stock (Cada 10s)
                     setInterval(() => { this.sincronizarStock(); }, 10000);
+                },
+
+                // --- NUEVA FUNCIÓN: Calcular Precio con Descuento ---
+                getPrice(p) {
+                    let precio = parseFloat(p.precio_base);
+                    if (this.coupon) {
+                        if (this.coupon.tipo === 'porcentaje') {
+                            precio = precio * (1 - (this.coupon.valor / 100));
+                        } else {
+                            precio = Math.max(0, precio - this.coupon.valor);
+                        }
+                    }
+                    return precio;
+                },
+
+                // --- NUEVA FUNCIÓN: Aplicar Cupón ---
+                aplicarCupon() {
+                    if(!this.couponCodeInput.trim()) return;
+                    
+                    fetch('api/validar_cupon.php', {
+                        method: 'POST',
+                        body: JSON.stringify({ codigo: this.couponCodeInput })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if(data.status === 'success') {
+                            window.location.reload(); // Recargar para aplicar sesión PHP
+                        } else {
+                            alert(data.message);
+                        }
+                    });
                 },
 
                 sincronizarStock() {
@@ -190,15 +226,16 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 addToCart(p, qty = 1, size = null) {
                     if (p.stock === 0) return;
                     
-                    // Validación de Variantes (Si tiene variantes, exige talla)
                     if (p.variantes && p.variantes.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
                         return;
                     }
                     
                     const qtyNum = parseInt(qty);
-                    // Clave única del carrito: ID + Talla
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
+                    
+                    // Usamos el precio CON descuento si existe cupón
+                    const finalPrice = this.getPrice(p);
 
                     if (itemIndex > -1) {
                         if ((this.cart[itemIndex].qty + qtyNum) > p.stock) {
@@ -206,26 +243,22 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             return;
                         }
                         this.cart[itemIndex].qty += qtyNum;
+                        this.cart[itemIndex].precio = finalPrice; // Actualizamos precio por si cambió cupón
                     } else {
                         let imgUrl = (p.imagenes && p.imagenes.length > 0) ? p.imagenes[0] : 'imagenes/torito.png';
-                        // ... dentro del else de addToCart ...
-
-                        // 1. Detectamos el stock real (Si hay variante seleccionada, usamos SU stock, si no, el general)
                         let stockReal = p.stock;
                         if (size && p.variantes) {
                             let varianteEncontrada = p.variantes.find(v => v.talla === size);
-                            if (varianteEncontrada) {
-                                stockReal = varianteEncontrada.stock;
-                            }
+                            if (varianteEncontrada) stockReal = varianteEncontrada.stock;
                         }
 
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
-                            precio: p.precio,
+                            precio: finalPrice, // Precio calculado
                             img: imgUrl,
                             qty: qtyNum,
-                            stock: stockReal, // <--- ¡AHORA SÍ! Guardamos el límite real de esa talla
+                            stock: stockReal,
                             talla: size
                         });
                     }
@@ -268,7 +301,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.showPayrollModal = false;
                         if (data.status === 'success') {
                             this.showSuccess = true;
-                            
                             // Actualización Optimista de Stock
                             this.cart.forEach(itemCart => {
                                 let productEnTienda = this.products.find(p => p.id === itemCart.id);
@@ -276,10 +308,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                     productEnTienda.stock = Math.max(0, productEnTienda.stock - itemCart.qty);
                                 }
                             });
-
                             this.cart = [];
                             this.saveCart();
-                            setTimeout(() => { this.showSuccess = false; }, 4000);
+                            setTimeout(() => { this.showSuccess = false; window.location.href='mis_pedidos.php'; }, 2000);
                         } else {
                             alert('Error: ' + data.message);
                         }
@@ -360,15 +391,39 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
             </div>
             
-            <nav class="flex gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-2 pt-1">
-                <?php foreach($categorias as $cat): ?>
-                <button @click="currentCategory = '<?php echo $cat; ?>'" 
-                        :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-md transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" 
-                        class="px-4 md:px-6 py-1.5 md:py-2 rounded-full text-[10px] md:text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 flex-shrink-0">
-                    <?php echo strtoupper($cat); ?>
-                </button>
-                <?php endforeach; ?>
-            </nav>
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 pb-2 pt-1 border-t border-white/10 mt-2">
+                <nav class="flex gap-2 md:gap-3 overflow-x-auto no-scrollbar w-full md:w-auto">
+                    <?php foreach($categorias as $cat): ?>
+                    <button @click="currentCategory = '<?php echo $cat; ?>'" 
+                            :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-md transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" 
+                            class="px-4 md:px-6 py-1.5 md:py-2 rounded-full text-[10px] md:text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 flex-shrink-0">
+                        <?php echo strtoupper($cat); ?>
+                    </button>
+                    <?php endforeach; ?>
+                </nav>
+
+                <div class="w-full md:w-auto flex items-center justify-end">
+                    <template x-if="coupon">
+                        <div class="bg-white/10 backdrop-blur-md border border-yellow-400/30 text-white px-3 py-1.5 rounded-lg flex items-center gap-3 shadow-lg animate-pulse">
+                            <i data-lucide="ticket" class="w-4 h-4 text-yellow-300"></i>
+                            <div class="text-[10px] text-right leading-tight">
+                                <span class="font-black block text-yellow-300 uppercase tracking-widest" x-text="coupon.codigo"></span>
+                                <span class="opacity-80 font-bold" x-text="coupon.tipo === 'porcentaje' ? 'AHORRO: ' + Math.round(coupon.valor) + '%' : 'AHORRO: $' + coupon.valor"></span>
+                            </div>
+                            <a href="api/logout_cupon.php" class="ml-1 text-white/50 hover:text-red-400 transition-colors bg-black/20 rounded-full p-1"><i data-lucide="x" class="w-3 h-3"></i></a>
+                        </div>
+                    </template>
+                    <template x-if="!coupon">
+                        <div class="relative w-full md:w-48">
+                            <input type="text" x-model="couponCodeInput" @keydown.enter="aplicarCupon()" placeholder="CÓDIGO PROMOCIONAL" 
+                                   class="w-full bg-black/20 border border-white/10 rounded-lg pl-3 pr-8 py-2 text-[10px] font-bold text-white placeholder-white/40 focus:outline-none focus:bg-escala-dark focus:border-escala-beige transition-all uppercase tracking-wider">
+                            <button @click="aplicarCupon()" class="absolute right-1 top-1/2 -translate-y-1/2 text-escala-beige hover:text-white transition-colors p-1 hover:bg-white/10 rounded">
+                                <i data-lucide="arrow-right" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -392,9 +447,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="absolute top-4 left-0" x-show="p.es_top == 1 && p.stock > 0">
                         <div class="badge-top">TOP VENTAS</div>
                     </div>
+                    
                     <div class="absolute top-4 right-0 flex flex-col items-end space-y-2 z-20">
                          <div x-show="p.stock <= 5 && p.stock > 0" class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div>
-                         <div x-show="p.en_oferta == 1 && p.stock > 0" class="badge-right bg-sale">EN OFERTA</div>
+                         
+                         <div x-show="(p.en_oferta == 1 || (coupon && getPrice(p) < p.precio_base)) && p.stock > 0" class="badge-right bg-sale">
+                             <span x-text="coupon ? 'CUPÓN APLICADO' : 'EN OFERTA'"></span>
+                         </div>
+                         
                          <div x-show="p.stock === 0" class="badge-right bg-gray-500">AGOTADO</div>
                     </div>
 
@@ -446,12 +506,16 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 
                                 <div class="flex flex-col items-start">
                                     <span class="text-sm text-gray-400 line-through font-medium" 
-                                          x-show="p.en_oferta == 1 || p.precio_anterior > 0"
-                                          x-text="'$' + (p.precio_anterior > 0 ? p.precio_anterior.toFixed(2) : (p.precio * 1.3).toFixed(2))">
+                                          x-show="p.en_oferta == 1 || p.precio_anterior > 0 || getPrice(p) < p.precio_base"
+                                          x-text="'$' + p.precio_base.toFixed(2)">
                                     </span>
-                                    <span class="text-3xl font-black text-escala-green" x-text="'$' + p.precio.toFixed(2)"></span>
+                                    
+                                    <span class="text-3xl font-black" 
+                                          :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                          x-text="'$' + getPrice(p).toFixed(2)"></span>
+                                          
                                     <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">
-                                        Desde $<span x-text="(p.precio/3).toFixed(2)"></span> /qna
+                                        Desde $<span x-text="(getPrice(p)/3).toFixed(2)"></span> /qna
                                     </span>
                                 </div>
                             </div>
@@ -550,14 +614,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
             <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="selectedProduct = null"></div>
             
             <div class="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]" 
-                x-data="{ activeImgModal: 0, modalQty: 1 }">
+                 x-data="{ activeImgModal: 0, modalQty: 1 }">
                 
                 <div class="w-full md:w-1/2 bg-gray-50 p-12 flex items-center justify-center relative group">
                     <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) 
                                 ? selectedProduct.imagenes[activeImgModal] 
                                 : 'imagenes/torito.png'" 
-                         onerror="this.onerror=null; this.src='imagenes/torito.png';"
-                         class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
+                          onerror="this.onerror=null; this.src='imagenes/torito.png';"
+                          class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
                     
                     <button @click="selectedProduct = null" class="absolute top-6 left-6 md:hidden p-3 bg-white rounded-full shadow-md text-gray-800 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
                     
@@ -608,7 +672,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                                     'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed': v.stock === 0
                                                 }"
                                                 :disabled="v.stock === 0">
-                                                
+                                            
                                             <span x-text="v.talla"></span>
                                             
                                             <template x-if="v.stock === 0">
@@ -634,12 +698,16 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
-                                <span x-show="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0" 
+                                <span x-show="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0 || getPrice(selectedProduct) < selectedProduct.precio_base" 
                                       class="text-sm text-gray-400 line-through font-medium block" 
-                                      x-text="'$' + (selectedProduct.precio_anterior > 0 ? selectedProduct.precio_anterior.toFixed(2) : (selectedProduct.precio * 1.3).toFixed(2))"></span>
-                                <span class="text-4xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
+                                      x-text="'$' + selectedProduct.precio_base.toFixed(2)"></span>
+                                
+                                <span class="text-4xl font-black" 
+                                      :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                      x-text="'$' + getPrice(selectedProduct).toFixed(2)"></span>
+                                
                                 <span class="text-xs font-bold text-escala-beige block mt-1">
-                                    Desde $<span x-text="(selectedProduct.precio/3).toFixed(2)"></span> /qna
+                                    Desde $<span x-text="(getPrice(selectedProduct)/3).toFixed(2)"></span> /qna
                                 </span>
                             </div>
                         </div>
