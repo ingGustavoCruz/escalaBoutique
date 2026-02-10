@@ -1,8 +1,6 @@
 <?php
-// admin/logout.php
 session_start();
-session_unset(); // Borra las variables de sesión
-session_destroy(); // Destruye la sesión por completo
-
-header("Location: login.php");
+session_destroy();
+header("Location: index.php");
 exit;
+?>
