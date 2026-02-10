@@ -586,31 +586,50 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
     <div x-show="showPayrollModal" class="fixed inset-0 z-[70] flex items-center justify-center p-4" x-cloak>
         <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="!isPaying && (showPayrollModal = false)"></div>
         <div class="relative bg-white w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
+            
             <div x-show="isPaying">
                 <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-escala-green mx-auto mb-4"></div>
                 <h3 class="font-bold text-lg text-slate-800">Procesando...</h3>
                 <p class="text-xs text-gray-500">Enviando solicitud a Recursos Humanos</p>
             </div>
+
             <div x-show="!isPaying">
-                <h3 class="font-black text-xl uppercase mb-2 text-slate-900">Confirmar Descuento</h3>
-                <p class="text-sm text-gray-500 mb-6">
-                    Monto total a descontar: <br>
-                    <span class="font-black text-2xl text-escala-green" x-text="'$' + totalPrice()"></span>
-                </p>
-                <div class="flex gap-3 justify-center mb-8">
-                    <button @click="plazos = 1" :class="plazos === 1 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="flex-1 py-3 rounded-lg flex flex-col items-center justify-center transition-all">
+                <h3 class="font-black text-xl uppercase mb-1 text-slate-900">Confirmar Descuento</h3>
+                
+                <p class="text-xs text-gray-400 mb-2 uppercase tracking-wide font-bold">Monto total de la compra</p>
+                <span class="font-black text-4xl text-escala-green block mb-6" x-text="'$' + totalPrice()"></span>
+
+                <p class="text-xs text-gray-800 mb-3 font-bold">Selecciona los plazos a diferir:</p>
+                <div class="flex gap-3 justify-center mb-6">
+                    <button @click="plazos = 1" :class="plazos === 1 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
                         <span class="font-black text-lg">1</span><span class="text-[9px] uppercase font-bold">Qna</span>
                     </button>
-                    <button @click="plazos = 2" :class="plazos === 2 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="flex-1 py-3 rounded-lg flex flex-col items-center justify-center transition-all">
+                    <button @click="plazos = 2" :class="plazos === 2 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
                         <span class="font-black text-lg">2</span><span class="text-[9px] uppercase font-bold">Qnas</span>
                     </button>
-                    <button @click="plazos = 3" :class="plazos === 3 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" class="flex-1 py-3 rounded-lg flex flex-col items-center justify-center transition-all">
+                    <button @click="plazos = 3" :class="plazos === 3 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
                         <span class="font-black text-lg">3</span><span class="text-[9px] uppercase font-bold">Qnas</span>
                     </button>
                 </div>
+
+                <div class="bg-blue-50/60 rounded-xl p-4 mb-8 border border-blue-100">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold text-gray-500 uppercase">Tu descuento quincenal:</span>
+                        <span class="font-black text-xl text-escala-blue" x-text="'$' + (parseFloat(totalPrice()) / plazos).toFixed(2)"></span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 leading-tight text-right">
+                        <span x-show="plazos === 1">Se descontará en una sola exhibición.</span>
+                        <span x-show="plazos > 1">Durante las próximas <span x-text="plazos"></span> quincenas.</span>
+                    </p>
+                </div>
+
                 <div class="flex gap-3">
-                    <button @click="showPayrollModal = false" class="flex-1 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100 text-xs uppercase">Cancelar</button>
-                    <button @click="confirmarPedidoNomina()" class="flex-1 py-3 rounded-lg font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark transition-all text-xs uppercase">Confirmar</button>
+                    <button @click="showPayrollModal = false" class="flex-1 py-3.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 text-xs uppercase transition-colors">
+                        Cancelar
+                    </button>
+                    <button @click="confirmarPedidoNomina()" class="flex-1 py-3.5 rounded-xl font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark hover:shadow-xl transition-all text-xs uppercase transform active:scale-95">
+                        Confirmar
+                    </button>
                 </div>
             </div>
         </div>
