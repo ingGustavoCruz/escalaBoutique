@@ -10,7 +10,6 @@ if (!isset($_SESSION['admin_id']) || !isset($_GET['id'])) {
     exit;
 }
 
-$pedido_id = (int)$_GET['id']; // Corrección tipográfica intencional para evitar XSS, pero usando $_GET
 $pedido_id = (int)$_GET['id'];
 
 // --- PROCESAR CAMBIO DE ESTADO ---
@@ -25,6 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
     $stmtUpd->bind_param("si", $nuevo_estado, $pedido_id);
     if ($stmtUpd->execute()) {
         $msg = "Estado actualizado a: " . strtoupper($nuevo_estado);
+        // Actualizamos la info en memoria para que se refleje al instante
+        $conn->query("UPDATE pedidos SET estado = '$nuevo_estado' WHERE id = $pedido_id");
     }
 }
 
@@ -79,6 +80,11 @@ $detalles = $conn->query($queryDet);
             </div>
 
             <form method="POST" class="flex items-center gap-3">
+                
+                <a href="imprimir.php?id=<?php echo $pedido_id; ?>" target="_blank" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold uppercase shadow-sm flex items-center gap-2 border border-gray-300 transition-colors mr-2">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Recibo
+                </a>
+
                 <div class="relative">
                     <select name="nuevo_estado" class="appearance-none bg-gray-100 border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm font-bold uppercase focus:outline-none focus:ring-2 focus:ring-escala-green cursor-pointer">
                         <option value="pendiente" <?php echo $pedido['estado']=='pendiente'?'selected':''; ?>>Pendiente</option>
@@ -113,7 +119,11 @@ $detalles = $conn->query($queryDet);
                         </h2>
                     </div>
                     <div class="divide-y divide-gray-100">
-                        <?php while($item = $detalles->fetch_assoc()): ?>
+                        <?php 
+                        // Reiniciamos puntero por si acaso
+                        $detalles->data_seek(0);
+                        while($item = $detalles->fetch_assoc()): 
+                        ?>
                         <div class="p-5 flex items-center gap-4 hover:bg-gray-50 transition-colors">
                             <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 font-bold border border-gray-200">
                                 <?php echo substr($item['nombre'], 0, 1); ?>
