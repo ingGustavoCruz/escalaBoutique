@@ -258,25 +258,41 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
     <header class="bg-escala-green pt-4 pb-2 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
-            <div class="flex flex-row items-center justify-between gap-6 mb-6">
-                <div class="flex-shrink-0 bg-white/95 p-3 rounded-xl shadow-md">
-                    <img src="imagenes/EscalaBoutiqueCompleto.png" class="h-16 w-auto object-contain">
+            
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-4 md:mb-6">
+                
+                <div class="flex justify-between items-center w-full md:w-auto md:justify-start gap-4">
+                    
+                    <div class="flex-shrink-0 bg-white/95 p-2 md:p-3 rounded-xl shadow-md transition-all hover:scale-105">
+                        <img src="imagenes/EscalaBoutique.png" alt="Logo Mobile" class="h-10 w-auto object-contain block md:hidden">
+                        <img src="imagenes/EscalaBoutiqueCompleto.png" alt="Logo Desktop" class="h-12 md:h-16 w-auto object-contain hidden md:block">
+                    </div>
+
+                    <div class="flex flex-col items-end text-right md:hidden">
+                        <span class="text-[9px] font-bold text-gray-300 uppercase tracking-wider">HOLA,</span>
+                        <span class="text-xs font-bold text-escala-beige truncate max-w-[120px]"><?php echo explode(' ', $nombreCompleto)[0]; ?></span>
+                    </div>
                 </div>
-                <div class="relative w-full max-w-xl mx-auto hidden md:block">
-                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"></i>
-                    <input type="text" x-model="searchQuery" placeholder="Buscar productos por nombre o precio..." class="w-full pl-12 pr-4 py-3 bg-white border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige shadow-lg transition-all text-sm placeholder-gray-400 text-gray-800">
+
+                <div class="relative w-full md:max-w-xl mx-auto order-2 md:order-1">
+                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-gray-400"></i>
+                    <input type="text" x-model="searchQuery" 
+                           placeholder="Buscar..." 
+                           class="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3 bg-white border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige shadow-lg transition-all text-xs md:text-sm placeholder-gray-400 text-gray-800">
                 </div>
-                <div class="flex flex-col items-end text-right">
+
+                <div class="hidden md:flex flex-col items-end text-right order-3">
                     <span class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">BIENVENIDO</span>
                     <span class="text-sm font-bold text-escala-beige truncate max-w-[200px]"><?php echo $nombreCompleto; ?></span>
                 </div>
+
             </div>
             
-            <nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+            <nav class="flex gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-2 pt-1">
                 <?php foreach($categorias as $cat): ?>
                 <button @click="currentCategory = '<?php echo $cat; ?>'" 
-                        :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-lg transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" 
-                        class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300">
+                        :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-md transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" 
+                        class="px-4 md:px-6 py-1.5 md:py-2 rounded-full text-[10px] md:text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 flex-shrink-0">
                     <?php echo strtoupper($cat); ?>
                 </button>
                 <?php endforeach; ?>
