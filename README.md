@@ -1,34 +1,67 @@
-# perpetualife
-🛒 Perpetualife - E-commerce Platform
-Perpetualife es una plataforma de comercio electrónico integral diseñada para ofrecer una experiencia de compra fluida y segura. El sistema gestiona desde la visualización de productos hasta la culminación del pago, integrando herramientas modernas de procesamiento financiero.
+# 🛍️ Escala Boutique - Intranet E-commerce
 
-🚀 Características Principales
-Catálogo Dinámico: Visualización de productos en tiempo real gestionados desde una base de datos MySQL.
+Sistema de gestión de pedidos internos para empleados mediante descuento por nómina (Payroll Deduction).
 
-Gestión de Carrito: Sistema interactivo para agregar, eliminar y actualizar cantidades de productos.
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![PHP](https://img.shields.io/badge/PHP-8.0+-777BB4)
+![MySQL](https://img.shields.io/badge/MySQL-Database-4479A1)
 
-Pasarela de Pagos Segura: Integración completa con PayPal SDK y procesamiento de tarjetas de crédito/débito.
+## 🚀 Características Principales
 
-Diseño Responsivo: Interfaz optimizada para dispositivos móviles y escritorio.
+### 🛒 Frontend (Empleados)
 
-🛠️ Tecnologías Utilizadas
-Frontend: HTML5, CSS3, JavaScript (ES6+).
+- **Catálogo Visual:** Vista de productos con tallas y stock en tiempo real.
+- **Carrito de Compras:** Gestión de items antes de confirmar.
+- **Descuento por Nómina:** Cálculo automático de plazos quincenales.
+- **Mis Pedidos:** Historial de compras y estado de entrega.
 
-Backend: PHP 8.x.
+### 👮‍♂️ Backend (Administrador)
 
-Base de Datos: MySQL (XAMPP Environment).
+- **Dashboard BI:** Gráficas de ventas, KPIs, inventario crítico y exportación a Excel (CSV).
+- **Gestión de Pedidos:** Flujo de aprobación (Pendiente -> Entregado).
+- **Inventario:** CRUD de productos con gestión de **Tallas** y **Galería de Imágenes**.
+- **Marketing:** Módulo de Cupones con generador de imágenes para WhatsApp.
+- **Directorio:** Listado de empleados y análisis de consumo interno.
 
-Integraciones: PayPal Checkout REST SDK.
+## 🛠️ Tecnologías Utilizadas
 
-💡 ¿Qué más podrías agregar para hacerlo "Pro"?
-Si quieres que el proyecto pase de "funcional" a "impresionante", podrías considerar implementar estas funciones:
+- **Backend:** PHP Nativo (Sin frameworks pesados).
+- **Base de Datos:** MySQL / MariaDB.
+- **Frontend:** HTML5, Tailwind CSS (CDN).
+- **Interactividad:** Alpine.js (Manejo de estados y modales).
+- **Gráficos:** Chart.js.
+- **Reportes:** Librería `html2canvas` para cupones.
 
-Panel de Administración (Backoffice): * Un apartado protegido con contraseña donde el dueño de la tienda pueda subir fotos de productos, cambiar precios o ver el stock sin entrar a la base de datos manualmente.
+## ⚙️ Instalación
 
-Gestión de Inventario: * Que el sistema reste automáticamente un producto del stock cuando se confirme el pago por PayPal.
+1. **Base de Datos:**
+   - Crear una base de datos llamada `escala_boutique`.
+   - Importar el archivo `database/schema.sql` (o la estructura proporcionada).
 
-Historial de Pedidos: * Un área de usuario donde el cliente pueda ver qué ha comprado anteriormente y el estado de su envío.
+2. **Conexión:**
+   - Configurar credenciales en `api/conexion.php`.
 
-Buscador y Filtros: * Un buscador por palabras clave o filtros por categorías (ej. "Precio: menor a mayor") para facilitar la navegación.
+3. **Permisos:**
+   - Asegurar que la carpeta `imagenes/` tenga permisos de escritura.
 
-Confirmación por Email: * Usar una librería como PHPMailer para enviar un correo automático al cliente una vez que su pago sea aprobado.
+## 🔑 Credenciales por Defecto (Entorno Local)
+
+**Administrador:**
+
+- URL: `/admin/`
+- Usuario: (Configurado en base de datos, tabla `admins`)
+
+**Empleado de Prueba:**
+
+- Auto-login configurado para desarrollo local (`$_SESSION['empleado_id'] = 1`).
+
+## 📂 Estructura del Proyecto
+
+- `/admin` - Panel de control protegido.
+- `/api` - Lógica de conexión y endpoints.
+- `/imagenes` - Carga de fotos de productos.
+- `index.php` - Tienda principal.
+
+---
+
+Desarrollado para uso interno de Escala.

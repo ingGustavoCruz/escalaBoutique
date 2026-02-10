@@ -1,0 +1,10 @@
+# Evitar que vean la lista de archivos si entran a localhost/escalaBoutique/api/
+
+Options -Indexes
+
+# Proteger archivo de conexión (Opcional, pero recomendado)
+
+<Files "conexion.php">
+Order Allow,Deny
+Deny from all
+</Files>

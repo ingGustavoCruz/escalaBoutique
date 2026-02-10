@@ -59,7 +59,8 @@ $detalles = $conn->query($sqlDetalles);
         
         <div class="flex justify-between items-center border-b-2 border-black pb-4 mb-6">
             <div class="flex items-center gap-4">
-                <img src="../../imagenes/EscalaBoutique.png" alt="Logo" class="h-16 w-auto grayscale">
+                <img src="../../imagenes/EscalaBoutique.png" alt="Logo" class="h-16 w-auto" 
+     style="filter: brightness(0) saturate(100%) invert(19%) sepia(13%) saturate(3620%) hue-rotate(130deg) brightness(94%) contrast(102%);">    
                 <div>
                     <h1 class="text-2xl font-bold uppercase tracking-widest">Autorización de Descuento</h1>
                     <p class="text-sm">Escala Intranet Corporativa</p>

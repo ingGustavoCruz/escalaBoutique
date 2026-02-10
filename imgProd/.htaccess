@@ -1,0 +1,9 @@
+# 1. Evitar que listen tus archivos (Privacidad)
+Options -Indexes
+
+# 2. PROHIBIR EJECUCIÓN DE SCRIPTS (Seguridad Anti-Hackeo)
+# Esto le dice al servidor: "Si hay un archivo .php aquí, NO lo ejecutes, bloquéalo".
+<FilesMatch "\.(php|php5|phtml|pl|py|jsp|asp|htm|shtml|sh|cgi)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

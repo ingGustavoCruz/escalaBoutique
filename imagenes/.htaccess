@@ -1,0 +1,9 @@
+# Apagar el listado de directorio (que no vean todas tus fotos juntas)
+Options -Indexes
+
+# PROHIBIR EJECUCIÓN DE PHP
+# Si alguien logra subir un .php aquí, el servidor se negará a ejecutarlo.
+<FilesMatch "\.(php|php5|phtml|pl|py|jsp|asp|htm|shtml|sh|cgi)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

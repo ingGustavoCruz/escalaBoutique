@@ -1,0 +1,7 @@
+# Evitar listado de carpetas
+Options -Indexes
+
+# (Opcional) Forzar HTTPS si estuvieras en un servidor real
+# RewriteEngine On
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
