@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Soporte de Tallas (Logic-Aware)
+ * Versión: One Page Store (Sin filtros de categoría, enfocado en venta directa)
  */
 session_start();
 error_reporting(E_ALL);
@@ -51,30 +51,23 @@ $query = "SELECT p.*, GROUP_CONCAT(i.url_imagen ORDER BY i.es_principal DESC, i.
 
 $resultado = $conn->query($query);
 $productos = [];
-$categorias = ['Todos']; 
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
         $row['imagenes'] = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : ['https://via.placeholder.com/400'];
         $row['precio'] = (float)$row['precio'];
+        $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
         $row['stock'] = (int)$row['stock'];
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
-        $row['categoria'] = $row['categoria'] ?? 'General';
         $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
-        // Aseguramos que 'tallas' sea una cadena vacía si es null, para evitar errores en JS
         $row['tallas'] = $row['tallas'] ?? ''; 
         
-        if (!in_array($row['categoria'], $categorias)) {
-            $categorias[] = $row['categoria'];
-        }
         $productos[] = $row;
     }
 }
 
 $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empleado']['nombre'] : 'Invitado';
-$partesNombre = explode(' ', $nombreCompleto);
-$nombreCorto = $partesNombre[0];
 ?>
 
 <!DOCTYPE html>
@@ -103,8 +96,7 @@ $nombreCorto = $partesNombre[0];
 
         function appData() {
             return {
-                currentCategory: 'Todos',
-                searchQuery: '',
+                searchQuery: '', // Ya no usamos currentCategory
                 cartOpen: false,
                 selectedProduct: null,
                 showToast: false,
@@ -120,32 +112,24 @@ $nombreCorto = $partesNombre[0];
                     lucide.createIcons();
                 },
                 openModal(p) { 
-                    this.selectedProduct = JSON.parse(JSON.stringify(p)); // Clonar objeto
-                    this.selectedProduct.sizeSelected = ''; // Resetear talla
+                    this.selectedProduct = JSON.parse(JSON.stringify(p)); 
+                    this.selectedProduct.sizeSelected = ''; 
                 },
-                
-                // Función AÑADIR AL CARRITO mejorada para Tallas
                 addToCart(p, qty = 1, size = null) {
-                    // Validación de Talla
                     if (p.tallas && p.tallas.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
                         return;
                     }
-
                     const qtyNum = parseInt(qty);
-                    
-                    // Buscamos si ya existe el producto con la MISMA ID y la MISMA TALLA
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
 
                     if (itemIndex > -1) {
-                        // Ya existe, validamos stock (Global del producto)
                         if ((this.cart[itemIndex].qty + qtyNum) > p.stock) {
                             alert('Stock insuficiente.');
                             return;
                         }
                         this.cart[itemIndex].qty += qtyNum;
                     } else {
-                        // Nuevo item
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
@@ -153,42 +137,25 @@ $nombreCorto = $partesNombre[0];
                             img: p.imagenes[0],
                             qty: qtyNum,
                             stock: p.stock,
-                            talla: size // Guardamos la talla seleccionada (o null)
+                            talla: size
                         });
                     }
-
                     this.saveCart();
                     this.showToast = true;
-                    if(this.selectedProduct) this.selectedProduct = null; // Cerrar modal si estaba abierto
+                    if(this.selectedProduct) this.selectedProduct = null;
                     setTimeout(() => { this.showToast = false; }, 3000);
                 },
-
-                // Actualizar cantidad usando el Índice del Array (más seguro con tallas)
                 updateQty(index, delta) {
                     const item = this.cart[index];
                     if (!item) return;
-
                     const newQty = item.qty + delta;
-                    
-                    // Validar Stock
-                    if (delta > 0 && newQty > item.stock) {
-                        alert('Límite de stock alcanzado');
-                        return;
-                    }
-
-                    if (newQty <= 0) {
-                        // Eliminar del carrito
-                        this.cart.splice(index, 1);
-                    } else {
-                        item.qty = newQty;
-                    }
+                    if (delta > 0 && newQty > item.stock) { alert('Límite de stock alcanzado'); return; }
+                    if (newQty <= 0) { this.cart.splice(index, 1); } else { item.qty = newQty; }
                     this.saveCart();
                 },
-
                 saveCart() { localStorage.setItem('cart_escala', JSON.stringify(this.cart)); setTimeout(() => lucide.createIcons(), 50); },
                 totalPrice() { return this.cart.reduce((s, i) => s + (i.precio * i.qty), 0).toFixed(2); },
                 iniciarTramite() { this.cartOpen = false; this.showPayrollModal = true; },
-                
                 confirmarPedidoNomina() {
                     this.isPaying = true;
                     fetch('api/procesar_pedido_nomina.php', {
@@ -220,16 +187,12 @@ $nombreCorto = $partesNombre[0];
         [x-cloak] { display: none !important; }
         body { font-family: system-ui, -apple-system, sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        
         .badge-top { background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); color: white; font-weight: 800; padding: 5px 15px; clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); z-index: 10; font-size: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
         .badge-right { color: white; font-weight: 900; padding: 4px 10px 4px 18px; clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); z-index: 10; font-size: 10px; margin-bottom: 4px; text-transform: uppercase; box-shadow: -2px 2px 5px rgba(0,0,0,0.1); }
         .bg-sale { background-color: #FF9900; }
         .bg-last { background-color: #EF4444; }
-
         .btn-add { background-color: #00524A; color: white; transition: 0.3s; border-radius: 8px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
         .btn-add:hover { background-color: #003d36; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,82,74,0.3); }
-        
-        /* Botón Talla Seleccionado */
         .size-btn-active { background-color: #00524A; color: white; border-color: #00524A; }
     </style>
 </head>
@@ -241,9 +204,9 @@ $nombreCorto = $partesNombre[0];
         <p class="text-sm font-bold">Agregado al carrito</p>
     </div>
 
-    <header class="bg-escala-green pt-4 pb-2 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
+    <header class="bg-escala-green pt-4 pb-4 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
-            <div class="flex flex-row items-center justify-between gap-6 mb-6">
+            <div class="flex flex-row items-center justify-between gap-6">
                 <div class="flex-shrink-0 bg-white/95 p-3 rounded-xl shadow-md">
                     <img src="imagenes/EscalaBoutiqueCompleto.png" class="h-16 w-auto object-contain">
                 </div>
@@ -256,13 +219,12 @@ $nombreCorto = $partesNombre[0];
                     <span class="text-sm font-bold text-escala-beige truncate max-w-[200px]"><?php echo $nombreCompleto; ?></span>
                 </div>
             </div>
-            <nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                <?php foreach($categorias as $cat): ?>
-                <button @click="currentCategory = '<?php echo $cat; ?>'" :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-lg transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300">
-                    <?php echo $cat; ?>
-                </button>
-                <?php endforeach; ?>
-            </nav>
+            
+            <div class="md:hidden mt-4 relative w-full">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+                <input type="text" x-model="searchQuery" placeholder="Buscar productos..."
+                       class="w-full pl-12 pr-4 py-3 bg-white/90 border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige transition-all text-sm shadow-inner placeholder-gray-500 text-gray-800">
+            </div>
         </div>
     </header>
 
@@ -274,8 +236,10 @@ $nombreCorto = $partesNombre[0];
             </div>
         <?php else: ?>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <?php foreach($productos as $p): ?>
-            <div x-show="(currentCategory === 'Todos' || currentCategory === '<?php echo $p['categoria']; ?>') && ('<?php echo strtolower($p['nombre']); ?>'.includes(searchQuery.toLowerCase()) || '<?php echo $p['precio']; ?>'.includes(searchQuery.replace('$','').trim()))"
+            <?php foreach($productos as $p): 
+                $pJson = htmlspecialchars(json_encode($p, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG), ENT_QUOTES, 'UTF-8');
+            ?>
+            <div x-show="searchQuery === '' || '<?php echo strtolower($p['nombre']); ?>'.includes(searchQuery.toLowerCase())"
                  class="bg-white rounded-3xl p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] transition-all duration-300 border border-escala-dark flex flex-col relative group"
                  x-data="{ activeImg: 0, imgs: <?php echo htmlspecialchars(json_encode($p['imagenes']), ENT_QUOTES, 'UTF-8'); ?>, qty: 1 }">
                 
@@ -307,20 +271,27 @@ $nombreCorto = $partesNombre[0];
                                 <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
                                 <button @click="if(qty < <?php echo $p['stock']; ?>) qty++; else alert('Max stock')" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
                             </div>
+                            
                             <div class="flex flex-col items-start">
-                                <span class="text-sm text-gray-400 line-through font-medium">$<?php echo number_format($p['precio'] * 1.3, 2); ?></span>
+                                <?php if ($p['en_oferta'] == 1 || $p['precio_anterior'] > 0): ?>
+                                    <span class="text-sm text-gray-400 line-through font-medium">
+                                        $<?php echo number_format($p['precio_anterior'] > 0 ? $p['precio_anterior'] : $p['precio'] * 1.3, 2); ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="text-sm text-transparent font-medium select-none">.</span>
+                                <?php endif; ?>
                                 <span class="text-3xl font-black text-escala-green">$<?php echo number_format($p['precio'], 2); ?></span>
                             </div>
                         </div>
 
                         <div class="flex flex-col gap-3 w-full">
-                            <button @click="<?php echo !empty($p['tallas']) ? "openModal(" . htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') . ")" : "addToCart(" . htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') . ", qty)"; ?>" 
+                            <button @click="<?php echo !empty($p['tallas']) ? "openModal($pJson)" : "addToCart($pJson, qty)"; ?>" 
                                     class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
                                 <i data-lucide="shopping-cart" class="w-5 h-5"></i> 
                                 <?php echo !empty($p['tallas']) ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO'; ?>
                             </button>
                             
-                            <button @click="openModal(<?php echo htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8'); ?>)" 
+                            <button @click="openModal(<?php echo $pJson; ?>)" 
                                     class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
                                 <i data-lucide="info" class="w-3 h-3"></i> MÁS INFORMACIÓN
                             </button>
@@ -455,8 +426,10 @@ $nombreCorto = $partesNombre[0];
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
-                                <span class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio * 1.3).toFixed(2)"></span>
-                                <span class="text-4xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
+                                <template x-if="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0">
+                                    <span class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio_anterior > 0 ? parseFloat(selectedProduct.precio_anterior).toFixed(2) : (selectedProduct.precio * 1.3).toFixed(2))"></span>
+                                </template>
+                                <span class="text-4xl font-black text-escala-green" x-text="'$' + parseFloat(selectedProduct.precio).toFixed(2)"></span>
                             </div>
                         </div>
 
