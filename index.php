@@ -208,13 +208,24 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.cart[itemIndex].qty += qtyNum;
                     } else {
                         let imgUrl = (p.imagenes && p.imagenes.length > 0) ? p.imagenes[0] : 'imagenes/torito.png';
+                        // ... dentro del else de addToCart ...
+
+                        // 1. Detectamos el stock real (Si hay variante seleccionada, usamos SU stock, si no, el general)
+                        let stockReal = p.stock;
+                        if (size && p.variantes) {
+                            let varianteEncontrada = p.variantes.find(v => v.talla === size);
+                            if (varianteEncontrada) {
+                                stockReal = varianteEncontrada.stock;
+                            }
+                        }
+
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
                             precio: p.precio,
                             img: imgUrl,
                             qty: qtyNum,
-                            stock: p.stock,
+                            stock: stockReal, // <--- ¡AHORA SÍ! Guardamos el límite real de esa talla
                             talla: size
                         });
                     }
