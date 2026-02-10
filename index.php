@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: One Page Store (Sin filtros de categoría, enfocado en venta directa)
+ * Versión: Refactorizada (Client-Side Rendering con Alpine.js)
  */
 session_start();
 error_reporting(E_ALL);
@@ -42,7 +42,7 @@ if (isset($_SESSION['usuario_empleado'])) {
     }
 }
 
-// --- 2. CARGA PRODUCTOS ---
+// --- 2. CARGA PRODUCTOS (DATA PREPARATION) ---
 $conn->query("SET SESSION group_concat_max_len = 10000;");
 $query = "SELECT p.*, GROUP_CONCAT(i.url_imagen ORDER BY i.es_principal DESC, i.id ASC) as lista_imagenes 
           FROM productos p 
@@ -51,18 +51,30 @@ $query = "SELECT p.*, GROUP_CONCAT(i.url_imagen ORDER BY i.es_principal DESC, i.
 
 $resultado = $conn->query($query);
 $productos = [];
+$categorias = ['todos']; // Inicializamos categorías
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
+        // Normalización de datos para JSON
         $row['imagenes'] = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : ['https://via.placeholder.com/400'];
         $row['precio'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
         $row['stock'] = (int)$row['stock'];
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
-        $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
-        $row['tallas'] = $row['tallas'] ?? ''; 
+        $row['tallas'] = $row['tallas'] ?? ''; // Mantenemos string para procesar en JS si es necesario
         
+        // Limpieza de Categoría
+        $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
+        $catClean = empty($catClean) ? 'general' : $catClean;
+        $row['categoria_normalizada'] = $catClean;
+        
+        $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
+        
+        // Agregamos a lista única de categorías para el menú
+        if (!in_array($catClean, $categorias)) {
+            $categorias[] = $catClean;
+        }
         $productos[] = $row;
     }
 }
@@ -96,7 +108,11 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
         function appData() {
             return {
-                searchQuery: '', // Ya no usamos currentCategory
+                // INYECCIÓN DE DATOS SEGURA DESDE PHP
+                products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
+                
+                currentCategory: 'todos',
+                searchQuery: '',
                 cartOpen: false,
                 selectedProduct: null,
                 showToast: false,
@@ -107,20 +123,46 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
                 init() {
-                    this.$watch('selectedProduct', (val) => { if (val) setTimeout(() => lucide.createIcons(), 50); });
-                    this.$watch('cartOpen', (val) => { if (val) setTimeout(() => lucide.createIcons(), 50); });
-                    lucide.createIcons();
+                    // Watchers para regenerar iconos cuando cambia el filtro
+                    this.$watch('selectedProduct', () => setTimeout(() => lucide.createIcons(), 50));
+                    this.$watch('cartOpen', () => setTimeout(() => lucide.createIcons(), 50));
+                    this.$watch('currentCategory', () => setTimeout(() => lucide.createIcons(), 50));
+                    this.$watch('searchQuery', () => setTimeout(() => lucide.createIcons(), 100));
+                    
+                    setTimeout(() => lucide.createIcons(), 100);
                 },
+
+                // LÓGICA DE FILTRADO REACTIVA (EL CORAZÓN DEL ARREGLO)
+                get filteredProducts() {
+                    const q = this.searchQuery.toLowerCase().trim();
+                    const cat = this.currentCategory;
+
+                    return this.products.filter(p => {
+                        // Filtro Categoría
+                        const categoryMatch = (cat === 'todos' || p.categoria_normalizada === cat);
+                        
+                        // Filtro Buscador (Nombre o Precio)
+                        // Convertimos precio a string para poder buscar "200"
+                        const nameMatch = p.nombre.toLowerCase().includes(q);
+                        const priceMatch = p.precio.toString().includes(q);
+
+                        return categoryMatch && (q === '' || nameMatch || priceMatch);
+                    });
+                },
+
                 openModal(p) { 
+                    // Clonamos el objeto para evitar referencias circulares si editamos algo
                     this.selectedProduct = JSON.parse(JSON.stringify(p)); 
                     this.selectedProduct.sizeSelected = ''; 
                 },
+
                 addToCart(p, qty = 1, size = null) {
                     if (p.tallas && p.tallas.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
                         return;
                     }
                     const qtyNum = parseInt(qty);
+                    // Buscar si ya existe el producto con esa talla en el carrito
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
 
                     if (itemIndex > -1) {
@@ -134,7 +176,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             id: p.id,
                             nombre: p.nombre,
                             precio: p.precio,
-                            img: p.imagenes[0],
+                            img: p.imagenes[0], // Primera imagen
                             qty: qtyNum,
                             stock: p.stock,
                             talla: size
@@ -145,6 +187,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     if(this.selectedProduct) this.selectedProduct = null;
                     setTimeout(() => { this.showToast = false; }, 3000);
                 },
+
                 updateQty(index, delta) {
                     const item = this.cart[index];
                     if (!item) return;
@@ -153,9 +196,18 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     if (newQty <= 0) { this.cart.splice(index, 1); } else { item.qty = newQty; }
                     this.saveCart();
                 },
-                saveCart() { localStorage.setItem('cart_escala', JSON.stringify(this.cart)); setTimeout(() => lucide.createIcons(), 50); },
-                totalPrice() { return this.cart.reduce((s, i) => s + (i.precio * i.qty), 0).toFixed(2); },
+
+                saveCart() { 
+                    localStorage.setItem('cart_escala', JSON.stringify(this.cart)); 
+                    setTimeout(() => lucide.createIcons(), 50); 
+                },
+
+                totalPrice() { 
+                    return this.cart.reduce((s, i) => s + (i.precio * i.qty), 0).toFixed(2); 
+                },
+
                 iniciarTramite() { this.cartOpen = false; this.showPayrollModal = true; },
+
                 confirmarPedidoNomina() {
                     this.isPaying = true;
                     fetch('api/procesar_pedido_nomina.php', {
@@ -197,22 +249,22 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
     </style>
 </head>
 
-<body class="bg-slate-50 text-gray-900 text-slate-800 min-h-screen flex flex-col">
+<body class="bg-slate-50 text-gray-900 min-h-screen flex flex-col">
 
     <div x-show="showToast" x-cloak x-transition class="fixed top-5 right-5 z-[100] px-6 py-4 bg-white rounded-lg shadow-xl flex items-center gap-3 border-l-4 border-escala-green">
         <i data-lucide="check" class="w-5 h-5 text-escala-green"></i>
         <p class="text-sm font-bold">Agregado al carrito</p>
     </div>
 
-    <header class="bg-escala-green pt-4 pb-4 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
+    <header class="bg-escala-green pt-4 pb-2 sticky top-0 z-40 shadow-lg border-b border-escala-dark">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
-            <div class="flex flex-row items-center justify-between gap-6">
+            <div class="flex flex-row items-center justify-between gap-6 mb-6">
                 <div class="flex-shrink-0 bg-white/95 p-3 rounded-xl shadow-md">
                     <img src="imagenes/EscalaBoutiqueCompleto.png" class="h-16 w-auto object-contain">
                 </div>
                 <div class="relative w-full max-w-xl mx-auto hidden md:block">
                     <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"></i>
-                    <input type="text" x-model="searchQuery" placeholder="Buscar productos..." class="w-full pl-12 pr-4 py-3 bg-white border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige shadow-lg transition-all text-sm placeholder-gray-400 text-gray-800">
+                    <input type="text" x-model="searchQuery" placeholder="Buscar productos por nombre o precio..." class="w-full pl-12 pr-4 py-3 bg-white border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige shadow-lg transition-all text-sm placeholder-gray-400 text-gray-800">
                 </div>
                 <div class="flex flex-col items-end text-right">
                     <span class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">BIENVENIDO</span>
@@ -220,91 +272,99 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 </div>
             </div>
             
-            <div class="md:hidden mt-4 relative w-full">
-                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                <input type="text" x-model="searchQuery" placeholder="Buscar productos..."
-                       class="w-full pl-12 pr-4 py-3 bg-white/90 border-none rounded-full focus:outline-none focus:ring-2 focus:ring-escala-beige transition-all text-sm shadow-inner placeholder-gray-500 text-gray-800">
-            </div>
+            <nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                <?php foreach($categorias as $cat): ?>
+                <button @click="currentCategory = '<?php echo $cat; ?>'" 
+                        :class="currentCategory === '<?php echo $cat; ?>' ? 'bg-escala-beige text-white shadow-lg transform -translate-y-0.5' : 'bg-escala-dark/40 text-gray-300 border border-white/10 hover:bg-white/10 hover:text-white'" 
+                        class="px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300">
+                    <?php echo strtoupper($cat); ?>
+                </button>
+                <?php endforeach; ?>
+            </nav>
         </div>
     </header>
 
     <main class="max-w-[1400px] mx-auto px-4 sm:px-6 py-10 flex-grow w-full">
-        <?php if(empty($productos)): ?>
-            <div class="flex flex-col items-center justify-center h-64 text-gray-300">
-                <i data-lucide="package" class="w-16 h-16 mb-4 opacity-50"></i>
-                <p class="font-medium text-lg">No hay productos disponibles.</p>
-            </div>
-        <?php else: ?>
+        
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <?php foreach($productos as $p): 
-                $pJson = htmlspecialchars(json_encode($p, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG), ENT_QUOTES, 'UTF-8');
-            ?>
-            <div x-show="searchQuery === '' || '<?php echo strtolower($p['nombre']); ?>'.includes(searchQuery.toLowerCase())"
-                 class="bg-white rounded-3xl p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] transition-all duration-300 border border-escala-dark flex flex-col relative group"
-                 x-data="{ activeImg: 0, imgs: <?php echo htmlspecialchars(json_encode($p['imagenes']), ENT_QUOTES, 'UTF-8'); ?>, qty: 1 }">
+            
+            <template x-for="p in filteredProducts" :key="p.id">
+                <div class="bg-white rounded-3xl p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] transition-all duration-300 border border-escala-dark flex flex-col relative group"
+                     x-data="{ activeImg: 0, qty: 1 }">
                 
-                <div class="absolute top-4 left-0"><?php if ($p['es_top'] == 1): ?><div class="badge-top">TOP VENTAS</div><?php endif; ?></div>
-                <div class="absolute top-4 right-0 flex flex-col items-end space-y-2">
-                     <?php if ($p['stock'] <= 5): ?><div class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div><?php endif; ?>
-                     <?php if ($p['en_oferta'] == 1): ?><div class="badge-right bg-sale">EN OFERTA</div><?php endif; ?>
-                </div>
-
-                <div class="h-72 flex items-center justify-center mb-8 relative p-4">
-                    <img :src="imgs[activeImg]" class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
-                </div>
-
-                <div class="flex flex-col flex-grow items-center text-center">
-                    <h3 class="font-black text-xl text-slate-900 mb-2 uppercase leading-tight line-clamp-2"><?php echo $p['nombre']; ?></h3>
-                    <p class="text-xs text-gray-500 font-medium mb-3 px-2 line-clamp-2 min-h-[2.5em] leading-snug"><?php echo !empty($p['descripcion_corta']) ? $p['descripcion_corta'] : ''; ?></p>
-                    
-                    <div class="flex items-center gap-1 mb-4 justify-center">
-                        <?php for($i=1; $i<=5; $i++): $color = ($i <= (int)$p['calificacion']) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'; ?>
-                        <i data-lucide="star" class="w-4 h-4 <?php echo $color; ?>"></i><?php endfor; ?>
+                    <div class="absolute top-4 left-0" x-show="p.es_top == 1">
+                        <div class="badge-top">TOP VENTAS</div>
+                    </div>
+                    <div class="absolute top-4 right-0 flex flex-col items-end space-y-2">
+                         <div x-show="p.stock <= 5" class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div>
+                         <div x-show="p.en_oferta == 1" class="badge-right bg-sale">EN OFERTA</div>
                     </div>
 
-                    <p class="text-xs text-gray-500 mb-6 font-bold uppercase tracking-wider">STOCK: <span class="text-blue-600"><?php echo $p['stock']; ?></span></p>
+                    <div class="h-72 flex items-center justify-center mb-8 relative p-4 cursor-pointer" @click="openModal(p)">
+                        <img :src="p.imagenes[activeImg]" class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
+                    </div>
 
-                    <div class="mt-auto w-full">
-                        <div class="flex items-center justify-center gap-4 mb-8">
-                             <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner">
-                                <button @click="if(qty > 1) qty--" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                                <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
-                                <button @click="if(qty < <?php echo $p['stock']; ?>) qty++; else alert('Max stock')" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                            </div>
-                            
-                            <div class="flex flex-col items-start">
-                                <?php if ($p['en_oferta'] == 1 || $p['precio_anterior'] > 0): ?>
-                                    <span class="text-sm text-gray-400 line-through font-medium">
-                                        $<?php echo number_format($p['precio_anterior'] > 0 ? $p['precio_anterior'] : $p['precio'] * 1.3, 2); ?>
+                    <div class="flex flex-col flex-grow items-center text-center">
+                        <span class="text-[9px] bg-gray-200 text-gray-500 px-2 py-1 rounded mb-2" x-text="'[CAT: ' + p.categoria_normalizada.toUpperCase() + ']'"></span>
+
+                        <h3 class="font-black text-xl text-slate-900 mb-2 uppercase leading-tight line-clamp-2" x-text="p.nombre"></h3>
+                        <p class="text-xs text-gray-500 font-medium mb-3 px-2 line-clamp-2 min-h-[2.5em] leading-snug" x-text="p.descripcion_corta || ''"></p>
+                        
+                        <div class="flex items-center gap-1 mb-4 justify-center">
+                            <template x-for="i in 5">
+                                <i data-lucide="star" class="w-4 h-4" :class="i <= p.calificacion ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'"></i>
+                            </template>
+                        </div>
+
+                        <p class="text-xs text-gray-500 mb-6 font-bold uppercase tracking-wider">STOCK: <span class="text-blue-600" x-text="p.stock"></span></p>
+
+                        <div class="mt-auto w-full">
+                            <div class="flex items-center justify-center gap-4 mb-8">
+                                <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner">
+                                    <button @click="if(qty > 1) qty--" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                                    <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
+                                    <button @click="if(qty < p.stock) qty++; else alert('Max stock')" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                                </div>
+                                
+                                <div class="flex flex-col items-start">
+                                    <span class="text-sm text-gray-400 line-through font-medium" 
+                                          x-show="p.en_oferta == 1 || p.precio_anterior > 0"
+                                          x-text="'$' + (p.precio_anterior > 0 ? p.precio_anterior.toFixed(2) : (p.precio * 1.3).toFixed(2))">
                                     </span>
-                                <?php else: ?>
-                                    <span class="text-sm text-transparent font-medium select-none">.</span>
-                                <?php endif; ?>
-                                <span class="text-3xl font-black text-escala-green">$<?php echo number_format($p['precio'], 2); ?></span>
+                                    <span class="text-3xl font-black text-escala-green" x-text="'$' + p.precio.toFixed(2)"></span>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="flex flex-col gap-3 w-full">
-                            <button @click="<?php echo !empty($p['tallas']) ? "openModal($pJson)" : "addToCart($pJson, qty)"; ?>" 
-                                    class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                                <i data-lucide="shopping-cart" class="w-5 h-5"></i> 
-                                <?php echo !empty($p['tallas']) ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO'; ?>
-                            </button>
-                            
-                            <button @click="openModal(<?php echo $pJson; ?>)" 
-                                    class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
-                                <i data-lucide="info" class="w-3 h-3"></i> MÁS INFORMACIÓN
-                            </button>
+                            <div class="flex flex-col gap-3 w-full">
+                                <template x-if="p.tallas && p.tallas.length > 0">
+                                    <button @click="openModal(p)" class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                                        <i data-lucide="shopping-cart" class="w-5 h-5"></i> SELECCIONAR TALLA
+                                    </button>
+                                </template>
+                                <template x-if="!p.tallas || p.tallas.length === 0">
+                                    <button @click="addToCart(p, qty)" class="btn-add w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                                        <i data-lucide="shopping-cart" class="w-5 h-5"></i> AÑADIR AL CARRITO
+                                    </button>
+                                </template>
+                                
+                                <button @click="openModal(p)" class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
+                                    <i data-lucide="info" class="w-3 h-3"></i> MÁS INFORMACIÓN
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </template>
+
+            <div x-show="filteredProducts.length === 0" class="col-span-1 md:col-span-2 lg:col-span-3 flex flex-col items-center justify-center h-64 text-gray-300">
+                <i data-lucide="package" class="w-16 h-16 mb-4 opacity-50"></i>
+                <p class="font-medium text-lg">No se encontraron productos.</p>
             </div>
-            <?php endforeach; ?>
+
         </div>
-        <?php endif; ?>
     </main>
 
-    <footer class="bg-gray-60 py-6 border-t-2 border-escala-blue mt-auto">
+    <footer class="bg-gray-50 py-6 border-t-2 border-escala-blue mt-auto">
         <div class="max-w-[1400px] mx-auto px-4 flex flex-col items-center justify-center">
             <p class="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mb-4">Powered By</p>
             <img src="imagenes/KAI_NA.png" alt="KAI Experience" class="h-10 w-auto escala-blue">
@@ -395,7 +455,11 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     
                     <div class="mb-6 space-y-4">
                         <div class="flex items-center gap-2">
-                            <div class="flex text-yellow-400"><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i><i data-lucide="star" class="w-4 h-4 fill-current"></i></div>
+                            <div class="flex text-yellow-400">
+                                <template x-for="i in 5">
+                                    <i data-lucide="star" class="w-4 h-4" :class="i <= selectedProduct.calificacion ? 'fill-current' : 'text-gray-200'"></i>
+                                </template>
+                            </div>
                             <span class="text-xs font-bold text-gray-400 uppercase tracking-wide" x-text="'Stock: ' + selectedProduct.stock"></span>
                         </div>
 
@@ -426,10 +490,10 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
-                                <template x-if="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0">
-                                    <span class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio_anterior > 0 ? parseFloat(selectedProduct.precio_anterior).toFixed(2) : (selectedProduct.precio * 1.3).toFixed(2))"></span>
-                                </template>
-                                <span class="text-4xl font-black text-escala-green" x-text="'$' + parseFloat(selectedProduct.precio).toFixed(2)"></span>
+                                <span x-show="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0" 
+                                      class="text-sm text-gray-400 line-through font-medium block" 
+                                      x-text="'$' + (selectedProduct.precio_anterior > 0 ? selectedProduct.precio_anterior.toFixed(2) : (selectedProduct.precio * 1.3).toFixed(2))"></span>
+                                <span class="text-4xl font-black text-escala-green" x-text="'$' + selectedProduct.precio.toFixed(2)"></span>
                             </div>
                         </div>
 
