@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Fix Modal Trigger & Imagen Rota Persistente
+ * Versión: Gold Master (Frontend + Backend Sync + Realtime Stock)
  */
 session_start();
 error_reporting(E_ALL);
@@ -42,7 +42,7 @@ if (isset($_SESSION['usuario_empleado'])) {
     }
 }
 
-// --- 2. CARGA PRODUCTOS ---
+// --- 2. CARGA INICIAL DE PRODUCTOS ---
 $conn->query("SET SESSION group_concat_max_len = 10000;");
 $query = "SELECT p.*, GROUP_CONCAT(i.url_imagen ORDER BY i.es_principal DESC, i.id ASC) as lista_imagenes 
           FROM productos p 
@@ -61,14 +61,11 @@ if ($resultado && $resultado->num_rows > 0) {
             return !is_null($value) && $value !== ''; 
         }));
         
-        // Si después del filtro no hay imágenes, inicializamos vacío
-        if (empty($row['imagenes'])) {
-            $row['imagenes'] = []; 
-        }
+        if (empty($row['imagenes'])) { $row['imagenes'] = []; }
 
         $row['precio'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
-        $row['stock'] = (int)$row['stock'];
+        $row['stock'] = (int)$row['stock']; // Stock inicial (foto del momento)
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
         $row['tallas'] = $row['tallas'] ?? '';
@@ -129,15 +126,47 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
                 init() {
+                    // Loader inicial
                     setTimeout(() => {
                         this.isLoading = false;
                         setTimeout(() => lucide.createIcons(), 50);
                     }, 800);
 
+                    // Watchers visuales
                     this.$watch('selectedProduct', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('cartOpen', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('currentCategory', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('searchQuery', () => setTimeout(() => lucide.createIcons(), 100));
+
+                    // --- NUEVO: POLLING DE STOCK (CADA 10 SEGUNDOS) ---
+                    setInterval(() => {
+                        this.sincronizarStock();
+                    }, 10000);
+                },
+
+                // --- NUEVO: FUNCION DE SINCRONIZACIÓN SILENCIOSA ---
+                sincronizarStock() {
+                    fetch('api/obtener_stock.php')
+                        .then(res => {
+                            if (!res.ok) throw new Error('API no disponible');
+                            return res.json();
+                        })
+                        .then(data => {
+                            data.forEach(itemFresco => {
+                                // Buscamos el producto en memoria local
+                                let productoLocal = this.products.find(p => p.id === itemFresco.id);
+                                if (productoLocal) {
+                                    // Si el stock cambió en BD, actualizamos la vista
+                                    if (productoLocal.stock !== itemFresco.stock) {
+                                        productoLocal.stock = itemFresco.stock;
+                                    }
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            // Silencioso: no molestamos al usuario si falla el polling
+                            // console.warn("Sincronización de stock pausada:", err);
+                        });
                 },
 
                 get filteredProducts() {
@@ -155,7 +184,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 openModal(p) { 
                     this.selectedProduct = JSON.parse(JSON.stringify(p)); 
                     this.selectedProduct.sizeSelected = ''; 
-                    // Asegurar que empezamos en la imagen 0
                     this.activeImgModal = 0; 
                 },
 
@@ -176,7 +204,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         }
                         this.cart[itemIndex].qty += qtyNum;
                     } else {
-                        // Si no hay imagen, usar Torito
                         let imgUrl = (p.imagenes && p.imagenes.length > 0 && p.imagenes[0]) ? p.imagenes[0] : 'imagenes/torito.png';
                         
                         this.cart.push({
@@ -228,6 +255,18 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.showPayrollModal = false;
                         if (data.status === 'success') {
                             this.showSuccess = true;
+                            
+                            // --- NUEVO: ACTUALIZACIÓN OPTIMISTA DEL STOCK LOCAL ---
+                            // Restamos inmediatamente lo que se acaba de comprar para no esperar al polling
+                            this.cart.forEach(itemCart => {
+                                let productEnTienda = this.products.find(p => p.id === itemCart.id);
+                                if (productEnTienda) {
+                                    // Restamos stock, asegurando que no baje de 0
+                                    productEnTienda.stock = Math.max(0, productEnTienda.stock - itemCart.qty);
+                                }
+                            });
+                            // -----------------------------------------------------
+
                             this.cart = [];
                             this.saveCart();
                             setTimeout(() => { this.showSuccess = false; }, 4000);
@@ -235,7 +274,11 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             alert('Error: ' + data.message);
                         }
                     })
-                    .catch(err => { this.isPaying = false; alert('Error de conexión o API no implementada.'); });
+                    .catch(err => { 
+                        this.isPaying = false; 
+                        alert('Error de conexión con el servidor.'); 
+                        console.error(err);
+                    });
                 }
             }
         }
@@ -346,9 +389,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     </div>
 
                     <div class="h-72 flex items-center justify-center mb-8 relative p-4">
-                        
                         <div class="w-full h-full flex items-center justify-center">
-                             <img :src="(p.imagenes && p.imagenes.length > 0 && p.imagenes[activeImg]) ? p.imagenes[activeImg] : 'imagenes/torito.png'" 
+                            <img :src="(p.imagenes && p.imagenes.length > 0 && p.imagenes[activeImg]) ? p.imagenes[activeImg] : 'imagenes/torito.png'" 
                                  onerror="this.onerror=null; this.src='imagenes/torito.png';"
                                  class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
                         </div>
@@ -365,7 +407,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 </button>
                             </div>
                         </template>
-
                     </div>
 
                     <div class="flex flex-col flex-grow items-center text-center">
@@ -459,7 +500,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
             <template x-for="(item, index) in cart" :key="index">
                 <div class="flex gap-2 items-center bg-white p-2 rounded-lg shadow-sm border border-gray-100 relative group">
                     <div class="w-10 h-10 bg-white rounded flex items-center justify-center shrink-0 p-0.5 border border-gray-100">
-                         <img :src="item.img" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
+                        <img :src="item.img" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
@@ -590,7 +631,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
             <div x-show="isPaying">
                 <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-escala-green mx-auto mb-4"></div>
                 <h3 class="font-bold text-lg text-slate-800">Procesando...</h3>
-                <p class="text-xs text-gray-500">Enviando solicitud a Recursos Humanos</p>
+                <p class="text-xs text-gray-500">Enviando solicitud a Escala Boutique</p>
             </div>
 
             <div x-show="!isPaying">
