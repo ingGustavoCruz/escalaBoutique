@@ -1,9 +1,12 @@
 <?php
 /**
- * admin/dashboard.php - Dashboard Pro con Reportes y Gráficos
+ * admin/dashboard.php - Dashboard Pro con Reportes y Gráficos (RESPONSIVO)
  */
 session_start();
 require_once '../api/conexion.php';
+
+// Variable para el Sidebar incluido
+$ruta_base = "../"; 
 
 // Seguridad
 if (!isset($_SESSION['admin_id'])) { header("Location: index.php"); exit; }
@@ -97,11 +100,12 @@ $topEmpleados = $conn->query("
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard Pro | Escala Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Dashboard Pro | Escala Admin</title>
     <link rel="icon" type="image/png" href="../imagenes/monito01.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -110,163 +114,168 @@ $topEmpleados = $conn->query("
         }
     </script>
 </head>
-<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+<body class="bg-gray-50 font-sans text-gray-800" x-data="{ sidebarOpen: false }">
 
-    <aside class="w-64 bg-escala-dark text-escala-beige flex flex-col flex-shrink-0 shadow-2xl z-20">
-        <div class="p-6 flex flex-col items-center justify-center border-b border-white/10 bg-escala-green/20">
-            <img src="../imagenes/EscalaBoutique.png" alt="Escala" class="h-8 w-auto object-contain mb-2">
-            <span class="font-black text-[10px] text-white uppercase tracking-widest">Administrador</span>
-        </div>
-        <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-2">
-            <a href="dashboard.php" class="flex items-center gap-3 px-4 py-3 bg-white/10 text-white rounded-xl shadow-inner transition-all"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> <span class="font-bold text-sm">Dashboard</span></a>
-            <a href="productos/" class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all"><i data-lucide="package" class="w-5 h-5"></i> <span class="font-medium text-sm">Productos</span></a>
-            <a href="pedidos/" class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all"><i data-lucide="shopping-bag" class="w-5 h-5"></i> <span class="font-medium text-sm">Pedidos</span></a>
-            <a href="empleados/" class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all"><i data-lucide="users" class="w-5 h-5"></i> <span class="font-medium text-sm">Empleados</span></a>
-            <a href="cupones/" class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all"><i data-lucide="ticket" class="w-5 h-5"></i> <span class="font-medium text-sm">Cupones</span></a>
-        </nav>
-    </aside>
-
-    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+    <div class="flex h-screen overflow-hidden">
         
-        <header class="bg-white shadow-sm px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 z-10 border-b border-gray-100">
-            <div>
-                <h1 class="text-xl font-black text-escala-green uppercase tracking-wide">Resumen Ejecutivo</h1>
-                <p class="text-xs text-gray-400">Visión general del negocio</p>
-            </div>
-            
-            <form class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200">
-                <span class="text-[10px] font-bold text-gray-400 uppercase ml-2">Periodo:</span>
-                <input type="date" name="desde" value="<?php echo $fecha_inicio; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
-                <span class="text-gray-300">-</span>
-                <input type="date" name="hasta" value="<?php echo $fecha_fin; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
-                <button type="submit" class="bg-escala-dark hover:bg-escala-green text-white p-1.5 rounded transition-colors"><i data-lucide="search" class="w-3 h-3"></i></button>
-            </form>
+        <?php include 'includes/sidebar.php'; ?>
 
-            <a href="dashboard.php?export=true" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase shadow-md transition-all flex items-center gap-2">
-                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar Excel
-            </a>
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
             
-            <?php if($critico > 0): ?>
-            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm flex items-center justify-between">
+            <div class="md:hidden bg-white h-16 shadow-sm flex items-center justify-between px-4 z-20 border-b border-gray-200 flex-shrink-0">
                 <div class="flex items-center gap-3">
-                    <div class="bg-red-100 p-2 rounded-full text-red-500"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
-                    <div>
-                        <h3 class="text-sm font-black text-red-800 uppercase">Atención: Inventario Crítico</h3>
-                        <p class="text-xs text-red-600">Hay <strong><?php echo $critico; ?> productos</strong> con stock bajo (menos de 5 unidades).</p>
-                    </div>
+                    <button @click="sidebarOpen = true" class="text-gray-600 hover:text-escala-green focus:outline-none">
+                        <i data-lucide="menu" class="w-6 h-6"></i>
+                    </button>
+                    <span class="font-black text-escala-green uppercase tracking-wide">Escala Admin</span>
                 </div>
-                <a href="productos/" class="text-xs font-bold text-red-700 underline hover:text-red-900">Ver inventario</a>
-            </div>
-            <?php endif; ?>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="bg-gradient-to-br from-escala-green to-escala-dark rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
-                    <div class="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
-                    <p class="text-escala-beige text-xs font-bold uppercase tracking-widest mb-1">Ingresos (Periodo)</p>
-                    <h2 class="text-4xl font-black">$<?php echo number_format($ventasPeriodo, 2); ?></h2>
-                    <div class="mt-4 flex items-center gap-2 text-[10px] bg-black/20 w-fit px-2 py-1 rounded">
-                        <i data-lucide="trending-up" class="w-3 h-3"></i> Ventas Netas
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
-                    <div class="absolute right-4 top-4 bg-purple-50 p-3 rounded-xl text-purple-600 group-hover:rotate-12 transition-transform"><i data-lucide="shopping-bag" class="w-6 h-6"></i></div>
-                    <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Pedidos (Periodo)</p>
-                    <h2 class="text-4xl font-black text-gray-800"><?php echo $pedidosPeriodo; ?></h2>
-                    <p class="text-xs text-gray-400 mt-2 font-medium">Órdenes procesadas</p>
-                </div>
-
-                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
-                    <div class="absolute right-4 top-4 bg-green-50 p-3 rounded-xl text-green-600 group-hover:rotate-12 transition-transform"><i data-lucide="users" class="w-6 h-6"></i></div>
-                    <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Usuarios Activos</p>
-                    <h2 class="text-4xl font-black text-gray-800"><?php echo $nuevosPeriodo; ?></h2>
-                    <p class="text-xs text-gray-400 mt-2 font-medium">Accesos en el periodo</p>
+                <div class="w-8 h-8 bg-escala-green/10 rounded-full flex items-center justify-center text-escala-green font-bold text-xs">
+                    <?php echo substr($_SESSION['admin_nombre'] ?? 'A', 0, 1); ?>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h3 class="font-bold text-gray-700 text-sm mb-6 flex items-center gap-2">
-                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-escala-green"></i> Tendencia de Ventas (6 Meses)
-                    </h3>
-                    <div class="h-64">
-                        <canvas id="salesChart"></canvas>
-                    </div>
+            <header class="bg-white shadow-sm px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 z-10 border-b border-gray-100 flex-shrink-0">
+                <div class="w-full md:w-auto text-center md:text-left">
+                    <h1 class="text-xl font-black text-escala-green uppercase tracking-wide">Resumen Ejecutivo</h1>
+                    <p class="text-xs text-gray-400">Visión general del negocio</p>
                 </div>
                 
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h3 class="font-bold text-gray-700 text-sm mb-6 flex items-center gap-2">
-                        <i data-lucide="pie-chart" class="w-4 h-4 text-escala-green"></i> Compras por Área
-                    </h3>
-                    <div class="h-64 flex justify-center">
-                        <canvas id="areaChart"></canvas>
-                    </div>
-                </div>
-            </div>
+                <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                    <form class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 w-full md:w-auto justify-center">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase ml-2 hidden md:inline">Periodo:</span>
+                        <input type="date" name="desde" value="<?php echo $fecha_inicio; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
+                        <span class="text-gray-300">-</span>
+                        <input type="date" name="hasta" value="<?php echo $fecha_fin; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
+                        <button type="submit" class="bg-escala-dark hover:bg-escala-green text-white p-1.5 rounded transition-colors"><i data-lucide="search" class="w-3 h-3"></i></button>
+                    </form>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <a href="dashboard.php?export=true&desde=<?php echo $fecha_inicio; ?>&hasta=<?php echo $fecha_fin; ?>" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase shadow-md transition-all flex items-center justify-center gap-2 w-full md:w-auto">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> <span class="md:hidden lg:inline">Exportar Excel</span>
+                    </a>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                 
-                <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
-                        <i data-lucide="star" class="w-4 h-4 text-yellow-500"></i> Top Productos
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="text-[10px] text-gray-400 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2 rounded-l-lg">Producto</th>
-                                    <th class="px-4 py-2">Stock</th>
-                                    <th class="px-4 py-2 text-right rounded-r-lg">Vendidos</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-50">
-                                <?php while($row = $topProductos->fetch_assoc()): ?>
-                                <tr>
-                                    <td class="px-4 py-3 font-bold text-gray-700"><?php echo $row['nombre']; ?></td>
-                                    <td class="px-4 py-3 text-xs">
-                                        <span class="<?php echo $row['stock']<5?'text-red-500 font-bold':'text-gray-500'; ?>">
-                                            <?php echo $row['stock']; ?> unds.
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-right font-bold text-escala-green"><?php echo $row['vendidos']; ?></td>
-                                </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
-                        <i data-lucide="crown" class="w-4 h-4 text-purple-500"></i> Empleados VIP
-                    </h3>
-                    <div class="space-y-4">
-                        <?php while($row = $topEmpleados->fetch_assoc()): ?>
-                        <div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 bg-escala-green/10 text-escala-green rounded-full flex items-center justify-center font-bold text-xs">
-                                    <?php echo substr($row['nombre'],0,1); ?>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-800 line-clamp-1"><?php echo $row['nombre']; ?></p>
-                                    <p class="text-[9px] text-gray-400 uppercase"><?php echo $row['area']; ?></p>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-xs font-black text-escala-dark">$<?php echo number_format($row['total']); ?></p>
-                                <p class="text-[9px] text-gray-400"><?php echo $row['ordenes']; ?> ord.</p>
-                            </div>
+                <?php if($critico > 0): ?>
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-red-100 p-2 rounded-full text-red-500"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                        <div>
+                            <h3 class="text-sm font-black text-red-800 uppercase">Atención: Inventario Crítico</h3>
+                            <p class="text-xs text-red-600">Hay <strong><?php echo $critico; ?> productos</strong> con stock bajo (menos de 5 unidades).</p>
                         </div>
-                        <?php endwhile; ?>
+                    </div>
+                    <a href="productos/" class="text-xs font-bold text-red-700 underline hover:text-red-900 whitespace-nowrap">Ver inventario</a>
+                </div>
+                <?php endif; ?>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-gradient-to-br from-escala-green to-escala-dark rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
+                        <div class="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
+                        <p class="text-escala-beige text-xs font-bold uppercase tracking-widest mb-1">Ingresos (Periodo)</p>
+                        <h2 class="text-4xl font-black">$<?php echo number_format($ventasPeriodo, 2); ?></h2>
+                        <div class="mt-4 flex items-center gap-2 text-[10px] bg-black/20 w-fit px-2 py-1 rounded">
+                            <i data-lucide="trending-up" class="w-3 h-3"></i> Ventas Netas
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
+                        <div class="absolute right-4 top-4 bg-purple-50 p-3 rounded-xl text-purple-600 group-hover:rotate-12 transition-transform"><i data-lucide="shopping-bag" class="w-6 h-6"></i></div>
+                        <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Pedidos (Periodo)</p>
+                        <h2 class="text-4xl font-black text-gray-800"><?php echo $pedidosPeriodo; ?></h2>
+                        <p class="text-xs text-gray-400 mt-2 font-medium">Órdenes procesadas</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
+                        <div class="absolute right-4 top-4 bg-green-50 p-3 rounded-xl text-green-600 group-hover:rotate-12 transition-transform"><i data-lucide="users" class="w-6 h-6"></i></div>
+                        <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Usuarios Activos</p>
+                        <h2 class="text-4xl font-black text-gray-800"><?php echo $nuevosPeriodo; ?></h2>
+                        <p class="text-xs text-gray-400 mt-2 font-medium">Accesos en el periodo</p>
                     </div>
                 </div>
-            </div>
 
-        </div>
-    </main>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-gray-700 text-sm mb-6 flex items-center gap-2">
+                            <i data-lucide="bar-chart-2" class="w-4 h-4 text-escala-green"></i> Tendencia de Ventas (6 Meses)
+                        </h3>
+                        <div class="h-64">
+                            <canvas id="salesChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <h3 class="font-bold text-gray-700 text-sm mb-6 flex items-center gap-2">
+                            <i data-lucide="pie-chart" class="w-4 h-4 text-escala-green"></i> Compras por Área
+                        </h3>
+                        <div class="h-64 flex justify-center">
+                            <canvas id="areaChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
+                            <i data-lucide="star" class="w-4 h-4 text-yellow-500"></i> Top Productos
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-[10px] text-gray-400 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 rounded-l-lg">Producto</th>
+                                        <th class="px-4 py-2">Stock</th>
+                                        <th class="px-4 py-2 text-right rounded-r-lg">Vendidos</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-50">
+                                    <?php while($row = $topProductos->fetch_assoc()): ?>
+                                    <tr>
+                                        <td class="px-4 py-3 font-bold text-gray-700"><?php echo $row['nombre']; ?></td>
+                                        <td class="px-4 py-3 text-xs">
+                                            <span class="<?php echo $row['stock']<5?'text-red-500 font-bold':'text-gray-500'; ?>">
+                                                <?php echo $row['stock']; ?> unds.
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3 text-right font-bold text-escala-green"><?php echo $row['vendidos']; ?></td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
+                            <i data-lucide="crown" class="w-4 h-4 text-purple-500"></i> Empleados VIP
+                        </h3>
+                        <div class="space-y-4">
+                            <?php while($row = $topEmpleados->fetch_assoc()): ?>
+                            <div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 bg-escala-green/10 text-escala-green rounded-full flex items-center justify-center font-bold text-xs">
+                                        <?php echo substr($row['nombre'],0,1); ?>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-bold text-gray-800 line-clamp-1"><?php echo $row['nombre']; ?></p>
+                                        <p class="text-[9px] text-gray-400 uppercase"><?php echo $row['area']; ?></p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs font-black text-escala-dark">$<?php echo number_format($row['total']); ?></p>
+                                    <p class="text-[9px] text-gray-400"><?php echo $row['ordenes']; ?> ord.</p>
+                                </div>
+                            </div>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
 
     <script>
         lucide.createIcons();
