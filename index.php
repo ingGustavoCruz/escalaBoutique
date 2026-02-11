@@ -506,14 +506,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 
                                 <div class="flex flex-col items-start">
                                     <span class="text-sm text-gray-400 line-through font-medium" 
-                                          x-show="p.en_oferta == 1 || p.precio_anterior > 0 || getPrice(p) < p.precio_base"
-                                          x-text="'$' + p.precio_base.toFixed(2)">
+                                        x-show="(p.precio_anterior > p.precio_base) || getPrice(p) < p.precio_base"
+                                        x-text="'$' + (p.precio_anterior > p.precio_base ? p.precio_anterior : p.precio_base).toFixed(2)">
                                     </span>
                                     
                                     <span class="text-3xl font-black" 
-                                          :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                          x-text="'$' + getPrice(p).toFixed(2)"></span>
-                                          
+                                        :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                        x-text="'$' + getPrice(p).toFixed(2)"></span>
+                                        
                                     <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">
                                         Desde $<span x-text="(getPrice(p)/3).toFixed(2)"></span> /qna
                                     </span>
@@ -698,13 +698,15 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
-                                <span x-show="selectedProduct.en_oferta == 1 || selectedProduct.precio_anterior > 0 || getPrice(selectedProduct) < selectedProduct.precio_base" 
-                                      class="text-sm text-gray-400 line-through font-medium block" 
-                                      x-text="'$' + selectedProduct.precio_base.toFixed(2)"></span>
-                                
+                                <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" 
+                                    class="text-sm text-gray-400 line-through font-medium block" 
+                                    x-text="'$' + (selectedProduct.precio_anterior > selectedProduct.precio_base ? selectedProduct.precio_anterior : selectedProduct.precio_base).toFixed(2)">
+                                </span>
+
                                 <span class="text-4xl font-black" 
-                                      :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                      x-text="'$' + getPrice(selectedProduct).toFixed(2)"></span>
+                                    :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                    x-text="'$' + getPrice(selectedProduct).toFixed(2)">
+                                </span>
                                 
                                 <span class="text-xs font-bold text-escala-beige block mt-1">
                                     Desde $<span x-text="(getPrice(selectedProduct)/3).toFixed(2)"></span> /qna
