@@ -192,15 +192,13 @@ try {
 
     // --- LISTA DE DESTINATARIOS ---
     // Aquí definimos quién recibe el correo.
+    $email_nomina = get_config('email_nomina', $conn);
+    $email_almacen = get_config('email_almacen', $conn);
+
     $destinatarios = [
-        // 1. EL USUARIO COMPRADOR (Obtenido de la sesión)
         ['email' => $empleado_email, 'nombre' => $empleado_nombre],
-        
-        // 2. DIRECTORA DE NÓMINA (Para procesar el pago)
-        ['email' => 'mundo_cube@hotmail.com', 'tavo' => 'Dirección de Nóminas'], 
-        
-        // 3. ENCARGADO DE ALMACÉN (Para preparar el paquete)
-        ['email' => 'munecodealambre@gmail.com', 'gusgus' => 'Encargado Almacén'] 
+        ['email' => $email_nomina, 'nombre' => 'Dirección de Nóminas'], 
+        ['email' => $email_almacen, 'nombre' => 'Encargado Almacén'] 
     ];
 
     try {

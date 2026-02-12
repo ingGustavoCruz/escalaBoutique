@@ -548,7 +548,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                         <div class="mt-auto w-full">
                             <div class="flex items-center justify-center gap-4 mb-8">
-                                 <div class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner" :class="{'opacity-50': p.stock === 0}">
+                                 <div x-show="!p.variantes || p.variantes.length === 0" class="flex items-center bg-gray-100 rounded-full p-1 shadow-inner" :class="{'opacity-50': p.stock === 0}">
                                     <button @click="if(qty > 1) qty--" :disabled="p.stock===0" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
                                     <span class="w-10 text-center font-black text-lg" x-text="qty"></span>
                                     <button @click="if(qty < p.stock) qty++; else if(p.stock>0) alert('Max stock')" :disabled="p.stock===0" class="p-2 hover:text-blue-600 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
@@ -670,8 +670,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) 
                                 ? selectedProduct.imagenes[activeImgModal] 
                                 : 'imagenes/torito.png'" 
-                          onerror="this.onerror=null; this.src='imagenes/torito.png';"
-                          class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
+                         onerror="this.onerror=null; this.src='imagenes/torito.png';"
+                         class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
                     
                     <button @click="selectedProduct = null" class="absolute top-6 left-6 md:hidden p-3 bg-white rounded-full shadow-md text-gray-800 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
                     
@@ -743,7 +743,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             <div class="flex items-center bg-gray-100 rounded-full px-4 py-2 border border-gray-200" :class="{'opacity-50 pointer-events-none': selectedProduct.stock === 0}">
                                 <button @click="if(modalQty > 1) modalQty--" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">−</button>
                                 <span class="mx-4 font-black text-xl text-slate-800 w-6 text-center" x-text="modalQty"></span>
-                                <button @click="if(modalQty < selectedProduct.stock) modalQty++; else alert('Stock máximo alcanzado')" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
+                                <button @click="let max = selectedProduct.sizeSelected ? selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected).stock : selectedProduct.stock; if(modalQty < max) modalQty++; else alert('Stock máximo alcanzado para esta talla');" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
                                 <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" 

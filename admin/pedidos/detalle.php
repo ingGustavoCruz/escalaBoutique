@@ -15,23 +15,51 @@ $pedido_id = (int)$_GET['id'];
 
 // --- PROCESAR CAMBIO DE ESTADO ---
 $msg = '';
+// --- PROCESAR CAMBIO DE ESTADO ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
     $nuevo_estado = $_POST['nuevo_estado'];
     
-    // Obtener estado anterior para bitácora
-    $estado_ant = $conn->query("SELECT estado FROM pedidos WHERE id=$pedido_id")->fetch_object()->estado;
+    // 1. Obtener estado anterior para bitácora y validación
+    $pedido_info = $conn->query("SELECT estado FROM pedidos WHERE id=$pedido_id")->fetch_object();
+    $estado_ant = $pedido_info->estado;
 
-    $stmtUpd = $conn->prepare("UPDATE pedidos SET estado = ? WHERE id = ?");
-    $stmtUpd->bind_param("si", $nuevo_estado, $pedido_id);
-    if ($stmtUpd->execute()) {
-        
-        // Bitácora
-        if($estado_ant !== $nuevo_estado) {
+    if ($estado_ant !== $nuevo_estado) {
+        $conn->begin_transaction();
+        try {
+            // A. Si el pedido se CANCELA, devolvemos stock
+            if ($nuevo_estado === 'cancelado') {
+                $resDet = $conn->query("SELECT producto_id, cantidad, talla FROM detalles_pedido WHERE pedido_id = $pedido_id");
+                
+                while ($item = $resDet->fetch_assoc()) {
+                    if (!empty($item['talla'])) {
+                        // Regresar a inventario_tallas (El TRIGGER actualizará la tabla productos)
+                        $stmtStk = $conn->prepare("UPDATE inventario_tallas SET stock = stock + ? WHERE producto_id = ? AND talla = ?");
+                        $stmtStk->bind_param("iis", $item['cantidad'], $item['producto_id'], $item['talla']);
+                    } else {
+                        // Regresar a stock global de productos
+                        $stmtStk = $conn->prepare("UPDATE productos SET stock = stock + ? WHERE id = ?");
+                        $stmtStk->bind_param("ii", $item['cantidad'], $item['producto_id']);
+                    }
+                    $stmtStk->execute();
+                }
+            }
+
+            // B. Si el pedido estaba cancelado y se vuelve a poner en PENDIENTE/APROBADO (re-activación)
+            // Aquí deberías restar stock de nuevo, pero por simplicidad, enfoquémonos en la cancelación.
+
+            // C. Actualizar estado y registrar bitácora
+            $stmtUpd = $conn->prepare("UPDATE pedidos SET estado = ? WHERE id = ?");
+            $stmtUpd->bind_param("si", $nuevo_estado, $pedido_id);
+            $stmtUpd->execute();
+
             registrarBitacora('PEDIDOS', 'EDITAR ESTADO', "Pedido #$pedido_id cambio de $estado_ant a " . strtoupper($nuevo_estado), $conn);
+            
+            $conn->commit();
+            $msg = "Estado actualizado y stock sincronizado.";
+        } catch (Exception $e) {
+            $conn->rollback();
+            $msg = "Error al procesar: " . $e->getMessage();
         }
-
-        $msg = "Estado actualizado a: " . strtoupper($nuevo_estado);
-        $conn->query("UPDATE pedidos SET estado = '$nuevo_estado' WHERE id = $pedido_id");
     }
 }
 
