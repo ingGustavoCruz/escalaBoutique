@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción (Soporte Variantes + Triggers + Stock Realtime + Cupones)
+ * Versión: Producción Final (Optimizado y Verificado)
  */
 session_start();
 error_reporting(E_ALL);
@@ -9,24 +9,22 @@ ini_set('display_errors', 0);
 
 require_once 'api/conexion.php';
 
-// --- 0. LÓGICA CUPONES (Backend) ---
+// --- 0. LÓGICA CUPONES ---
 $cupon_activo = $_SESSION['cupon_activo'] ?? null;
 
 // --- 1. LOGIN SILENCIOSO ---
 $es_local = ($_SERVER['SERVER_NAME'] === 'localhost' || $_SERVER['SERVER_NAME'] === '127.0.0.1');
 
-if ($es_local) {
-    if (!isset($_SESSION['usuario_empleado'])) {
-        $_SESSION['usuario_empleado'] = [
-            'numero' => '12345',
-            'nombre' => 'Empleado Pruebas Local',
-            'email'  => 'demo@escala.com',
-            'area'   => 'TI'
-        ];
-    }
+if ($es_local && !isset($_SESSION['usuario_empleado'])) {
+    $_SESSION['usuario_empleado'] = [
+        'numero' => '12345',
+        'nombre' => 'Empleado Pruebas Local',
+        'email'  => 'demo@escala.com',
+        'area'   => 'TI'
+    ];
 }
 
-// Registro en BD
+// Registro de Acceso en BD
 if (isset($_SESSION['usuario_empleado'])) {
     $emp = $_SESSION['usuario_empleado'];
     $stmt = $conn->prepare("SELECT id FROM empleados WHERE numero_empleado = ?");
@@ -45,7 +43,7 @@ if (isset($_SESSION['usuario_empleado'])) {
     }
 }
 
-// --- 2. CARGA PRODUCTOS CON VARIANTES ---
+// --- 2. CARGA PRODUCTOS ---
 $conn->query("SET SESSION group_concat_max_len = 10000;");
 
 $query = "SELECT p.*, 
@@ -54,6 +52,7 @@ $query = "SELECT p.*,
           FROM productos p 
           LEFT JOIN imagenes_productos i ON p.id = i.producto_id 
           LEFT JOIN inventario_tallas it ON p.id = it.producto_id
+          WHERE p.activo = 1 
           GROUP BY p.id";
 
 $resultado = $conn->query($query);
@@ -62,35 +61,35 @@ $categorias = ['todos'];
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
-        // Imágenes
+        // Procesamiento de Imágenes
         $imgsRaw = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : [];
-        $row['imagenes'] = array_values(array_filter($imgsRaw, function($v){ return !is_null($v) && $v !== ''; }));
-        if (empty($row['imagenes'])) { $row['imagenes'] = []; }
+        $row['imagenes'] = array_values(array_filter($imgsRaw, function($v){ return !empty($v); }));
 
-        // Variantes
+        // Procesamiento de Variantes
         $row['variantes'] = []; 
-        if ($row['lista_tallas_stock']) {
+        if (!empty($row['lista_tallas_stock'])) {
             $pares = explode(',', $row['lista_tallas_stock']);
             foreach ($pares as $par) {
-                list($t, $s) = explode(':', $par);
-                $row['variantes'][] = ['talla' => $t, 'stock' => (int)$s];
+                if (strpos($par, ':') !== false) {
+                    list($t, $s) = explode(':', $par);
+                    $row['variantes'][] = ['talla' => $t, 'stock' => (int)$s];
+                }
             }
         }
 
-        // Datos numéricos
+        // Casteo de Tipos (Importante para JS)
         $row['precio'] = (float)$row['precio'];
-        $row['precio_base'] = (float)$row['precio']; // Guardamos precio original para cálculos
+        $row['precio_base'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
         $row['stock'] = (int)$row['stock'];
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
-        $row['tallas'] = $row['tallas'] ?? '';
+        $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
         
-        // Categoría
+        // Categorías
         $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
         $catClean = empty($catClean) ? 'general' : $catClean;
         $row['categoria_normalizada'] = $catClean;
-        $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
         
         if (!in_array($catClean, $categorias)) {
             $categorias[] = $catClean;
@@ -128,8 +127,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
         function appData() {
             return {
+                // Inyección segura de JSON
                 products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
-                coupon: <?php echo json_encode($cupon_activo); ?>, // Cupón inyectado desde PHP
+                coupon: <?php echo json_encode($cupon_activo); ?>,
                 couponCodeInput: '',
                 isLoading: true,
                 currentCategory: 'todos',
@@ -145,36 +145,31 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
                 init() {
-                    // Loader
                     setTimeout(() => {
                         this.isLoading = false;
                         setTimeout(() => lucide.createIcons(), 50);
                     }, 800);
 
-                    // Watchers
+                    // Watchers optimizados
                     this.$watch('selectedProduct', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('cartOpen', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('currentCategory', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('searchQuery', () => setTimeout(() => lucide.createIcons(), 100));
 
-                    // Polling Stock (Cada 10s)
                     setInterval(() => { this.sincronizarStock(); }, 10000);
                 },
 
-                // --- NUEVA FUNCIÓN: Calcular Precio con Descuento ---
+                // Lógica de precio refactorizada
                 getPrice(p) {
                     let precio = parseFloat(p.precio_base);
                     if (this.coupon) {
-                        if (this.coupon.tipo === 'porcentaje') {
-                            precio = precio * (1 - (this.coupon.valor / 100));
-                        } else {
-                            precio = Math.max(0, precio - this.coupon.valor);
-                        }
+                        return this.coupon.tipo === 'porcentaje' 
+                            ? precio * (1 - (this.coupon.valor / 100))
+                            : Math.max(0, precio - this.coupon.valor);
                     }
                     return precio;
                 },
 
-                // --- NUEVA FUNCIÓN: Aplicar Cupón ---
                 aplicarCupon() {
                     if(!this.couponCodeInput.trim()) return;
                     
@@ -185,7 +180,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     .then(r => r.json())
                     .then(data => {
                         if(data.status === 'success') {
-                            window.location.reload(); // Recargar para aplicar sesión PHP
+                            window.location.reload(); 
                         } else {
                             alert(data.message);
                         }
@@ -233,8 +228,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     
                     const qtyNum = parseInt(qty);
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
-                    
-                    // Usamos el precio CON descuento si existe cupón
                     const finalPrice = this.getPrice(p);
 
                     if (itemIndex > -1) {
@@ -243,7 +236,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             return;
                         }
                         this.cart[itemIndex].qty += qtyNum;
-                        this.cart[itemIndex].precio = finalPrice; // Actualizamos precio por si cambió cupón
+                        this.cart[itemIndex].precio = finalPrice; 
                     } else {
                         let imgUrl = (p.imagenes && p.imagenes.length > 0) ? p.imagenes[0] : 'imagenes/torito.png';
                         let stockReal = p.stock;
@@ -255,7 +248,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.cart.push({
                             id: p.id,
                             nombre: p.nombre,
-                            precio: finalPrice, // Precio calculado
+                            precio: finalPrice, 
                             img: imgUrl,
                             qty: qtyNum,
                             stock: stockReal,
@@ -301,7 +294,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.showPayrollModal = false;
                         if (data.status === 'success') {
                             this.showSuccess = true;
-                            // Actualización Optimista de Stock
+                            // Optimistic UI Update
                             this.cart.forEach(itemCart => {
                                 let productEnTienda = this.products.find(p => p.id === itemCart.id);
                                 if (productEnTienda) {
@@ -330,13 +323,66 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         [x-cloak] { display: none !important; }
         body { font-family: system-ui, -apple-system, sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .badge-top { background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); color: white; font-weight: 800; padding: 5px 15px; clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); z-index: 10; font-size: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
-        .badge-right { color: white; font-weight: 900; padding: 4px 10px 4px 18px; clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); z-index: 10; font-size: 10px; margin-bottom: 4px; text-transform: uppercase; box-shadow: -2px 2px 5px rgba(0,0,0,0.1); }
+        
+        .badge-top { 
+            background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); 
+            color: white; 
+            font-weight: 800; 
+            padding: 5px 15px; 
+            clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); 
+            z-index: 10; 
+            font-size: 10px; 
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2); 
+        }
+        
+        .badge-blue-gradient {
+            background: linear-gradient(90deg, #1e3a8a 0%, #22d3ee 100%);
+            color: white;
+            font-weight: 900;
+            padding: 5px 22px 5px 12px;
+            clip-path: polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.2));
+            z-index: 10;
+        }
+
+        .badge-right { 
+            color: white; 
+            font-weight: 900; 
+            padding: 4px 10px 4px 18px; 
+            clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); 
+            z-index: 10; 
+            font-size: 10px; 
+            margin-bottom: 4px; 
+            text-transform: uppercase; 
+            box-shadow: -2px 2px 5px rgba(0,0,0,0.1); 
+        }
+        
         .bg-sale { background-color: #FF9900; }
         .bg-last { background-color: #EF4444; }
-        .btn-add { background-color: #00524A; color: white; transition: 0.3s; border-radius: 8px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
-        .btn-add:hover { background-color: #003d36; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,82,74,0.3); }
-        .size-btn-active { background-color: #00524A; color: white; border-color: #00524A; }
+        
+        .btn-add { 
+            background-color: #00524A; 
+            color: white; 
+            transition: 0.3s; 
+            border-radius: 8px; 
+            font-weight: 900; 
+            letter-spacing: 0.05em; 
+            text-transform: uppercase; 
+            font-size: 11px; 
+        }
+        .btn-add:hover { 
+            background-color: #003d36; 
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(0,82,74,0.3); 
+        }
+        .size-btn-active { 
+            background-color: #00524A; 
+            color: white; 
+            border-color: #00524A; 
+        }
     </style>
 </head>
 
@@ -388,7 +434,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         <a href="mis_pedidos.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-escala-green font-bold"><i data-lucide="package" class="inline w-4 h-4 mr-2"></i> Mis Pedidos</a>
                     </div>
                 </div>
-
             </div>
             
             <div class="flex flex-col md:flex-row items-center justify-between gap-4 pb-2 pt-1 border-t border-white/10 mt-2">
@@ -444,15 +489,20 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                      :class="{'opacity-60 grayscale pointer-events-none select-none': p.stock === 0}" 
                      x-data="{ activeImg: 0, qty: 1 }">
                 
-                    <div class="absolute top-4 left-0" x-show="p.es_top == 1 && p.stock > 0">
-                        <div class="badge-top">TOP VENTAS</div>
+                    <div class="absolute top-4 left-0 z-20 flex flex-col items-start gap-1">
+                        <div x-show="p.es_top == 1 && p.stock > 0">
+                            <div class="badge-top">TOP VENTAS</div>
+                        </div>
+                        <div x-show="coupon && getPrice(p) < p.precio_base && p.stock > 0" class="badge-blue-gradient">
+                            CUPÓN APLICADO
+                        </div>
                     </div>
                     
                     <div class="absolute top-4 right-0 flex flex-col items-end space-y-2 z-20">
                          <div x-show="p.stock <= 5 && p.stock > 0" class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div>
                          
-                         <div x-show="(p.en_oferta == 1 || (coupon && getPrice(p) < p.precio_base)) && p.stock > 0" class="badge-right bg-sale">
-                             <span x-text="coupon ? 'CUPÓN APLICADO' : 'EN OFERTA'"></span>
+                         <div x-show="p.en_oferta == 1 && !coupon && p.stock > 0" class="badge-right bg-sale">
+                             EN OFERTA
                          </div>
                          
                          <div x-show="p.stock === 0" class="badge-right bg-gray-500">AGOTADO</div>
@@ -506,14 +556,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 
                                 <div class="flex flex-col items-start">
                                     <span class="text-sm text-gray-400 line-through font-medium" 
-                                        x-show="(p.precio_anterior > p.precio_base) || getPrice(p) < p.precio_base"
-                                        x-text="'$' + (p.precio_anterior > p.precio_base ? p.precio_anterior : p.precio_base).toFixed(2)">
+                                          x-show="(p.precio_anterior > p.precio_base) || getPrice(p) < p.precio_base"
+                                          x-text="'$' + (p.precio_anterior > p.precio_base ? p.precio_anterior : p.precio_base).toFixed(2)">
                                     </span>
                                     
                                     <span class="text-3xl font-black" 
-                                        :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                        x-text="'$' + getPrice(p).toFixed(2)"></span>
-                                        
+                                          :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                          x-text="'$' + getPrice(p).toFixed(2)"></span>
+                                          
                                     <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">
                                         Desde $<span x-text="(getPrice(p)/3).toFixed(2)"></span> /qna
                                     </span>
@@ -672,9 +722,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                                     'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed': v.stock === 0
                                                 }"
                                                 :disabled="v.stock === 0">
-                                            
                                             <span x-text="v.talla"></span>
-                                            
                                             <template x-if="v.stock === 0">
                                                 <div class="absolute inset-0 flex items-center justify-center bg-white/50">
                                                     <div class="w-full h-[1px] bg-red-300 rotate-45 transform"></div>
@@ -699,14 +747,12 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             </div>
                             <div class="text-right">
                                 <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" 
-                                    class="text-sm text-gray-400 line-through font-medium block" 
-                                    x-text="'$' + (selectedProduct.precio_anterior > selectedProduct.precio_base ? selectedProduct.precio_anterior : selectedProduct.precio_base).toFixed(2)">
-                                </span>
-
+                                      class="text-sm text-gray-400 line-through font-medium block" 
+                                      x-text="'$' + (selectedProduct.precio_anterior > selectedProduct.precio_base ? selectedProduct.precio_anterior : selectedProduct.precio_base).toFixed(2)"></span>
+                                
                                 <span class="text-4xl font-black" 
-                                    :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                    x-text="'$' + getPrice(selectedProduct).toFixed(2)">
-                                </span>
+                                      :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
+                                      x-text="'$' + getPrice(selectedProduct).toFixed(2)"></span>
                                 
                                 <span class="text-xs font-bold text-escala-beige block mt-1">
                                     Desde $<span x-text="(getPrice(selectedProduct)/3).toFixed(2)"></span> /qna
