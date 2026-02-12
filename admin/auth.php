@@ -1,40 +1,40 @@
 <?php
 /**
- * admin/auth.php - Login de Administradores
+ * admin/auth.php - Login de Administradores Protegido con CSRF
  */
 session_start();
 require_once '../api/conexion.php';
-require_once '../api/logger.php'; // <--- INTEGRACIÓN BITÁCORA
+require_once '../api/logger.php'; 
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // CIRUGÍA: Validar escudo CSRF antes de procesar credenciales
+    validar_csrf(); 
+
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
-    // Validar contra tabla 'admins' (Asegúrate de tener esta tabla o ajusta a tu lógica)
-    // Antes: SELECT id, nombre, password FROM admins...
-// Ahora:
-$stmt = $conn->prepare("SELECT id, nombre, password, rol FROM admins WHERE email = ? LIMIT 1");
+    $stmt = $conn->prepare("SELECT id, nombre, password, rol FROM admins WHERE email = ? LIMIT 1");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $res = $stmt->get_result();
 
     if ($row = $res->fetch_assoc()) {
         // En producción usa: password_verify($password, $row['password'])
-        // Para este ejemplo asumo texto plano o md5 según tu configuración actual
         if ($password === $row['password']) { 
             $_SESSION['admin_id'] = $row['id'];
             $_SESSION['admin_nombre'] = $row['nombre'];
-            $_SESSION['admin_rol'] = $row['rol']; // <--- NUEVO: Guardamos el rol
+            $_SESSION['admin_rol'] = $row['rol']; 
 
             registrarBitacora('SEGURIDAD', 'LOGIN', "Acceso: " . $row['nombre'] . " (" . $row['rol'] . ")", $conn);
             header("Location: dashboard.php");
             exit;
-        }else {
+        } else {
             $error = "Contraseña incorrecta.";
-            // Opcional: Registrar intentos fallidos
-            // registrarBitacora('SEGURIDAD', 'LOGIN FALLIDO', "Pass incorrecto para: $email", $conn);
+            // Registro opcional de intento fallido en bitácora
+            registrarBitacora('SEGURIDAD', 'LOGIN FALLIDO', "Intento con pass incorrecto para: $email", $conn);
         }
     } else {
         $error = "Usuario no encontrado.";
@@ -66,6 +66,8 @@ $stmt = $conn->prepare("SELECT id, nombre, password, rol FROM admins WHERE email
         <?php endif; ?>
 
         <form method="POST" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Correo Electrónico</label>
                 <input type="email" name="email" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:border-escala-green focus:ring-1 focus:ring-escala-green transition-colors">
