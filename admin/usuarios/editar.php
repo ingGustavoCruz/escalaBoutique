@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/usuarios/editar.php - Modificar usuario Staff
+ * admin/usuarios/editar.php - Versión Consistente con Diseño General
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -69,7 +69,6 @@ if (!$usuario) { die("Usuario no encontrado."); }
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
-        // Configuración Quirúrgica: Inyección de la paleta oficial Escala
         tailwind.config = { 
             theme: { 
                 extend: { 
@@ -85,68 +84,107 @@ if (!$usuario) { die("Usuario no encontrado."); }
         }
     </script>
 </head>
-<body class="bg-slate-900/60 flex items-center justify-center min-h-screen p-4 backdrop-blur-md">
+<body class="bg-slate-50 font-sans text-gray-900">
 
-    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100 border border-white/20">
-        
-        <div class="px-8 py-6 border-b border-gray-100 flex items-center gap-3">
-            <div class="bg-escala-blue/10 p-2 rounded-lg text-escala-blue">
-                <i data-lucide="edit-3" class="w-6 h-6"></i>
-            </div>
-            <h1 class="text-xl font-black text-slate-800 tracking-tight">Editar Usuario</h1>
+    <header class="bg-white shadow-sm sticky top-0 z-10 border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
+            <a href="index.php" class="p-2 text-gray-400 hover:text-escala-green hover:bg-gray-100 rounded-full transition-all">
+                <i data-lucide="arrow-left" class="w-6 h-6"></i>
+            </a>
+            <h1 class="text-2xl font-black text-escala-dark uppercase tracking-tight">Editar Usuario</h1>
         </div>
+    </header>
 
-        <div class="p-8">
-            <?php if($msg): ?>
-                <div class="bg-red-100 text-red-700 p-3 rounded-lg mb-4 text-sm font-bold text-center">
-                    <?php echo $msg; ?>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        
+        <?php if($msg): ?>
+            <div class="mb-8 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm flex items-center gap-3">
+                <i data-lucide="alert-circle" class="w-6 h-6 text-red-500"></i>
+                <p class="text-red-700 font-bold"><?php echo $msg; ?></p>
+            </div>
+        <?php endif; ?>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+                    <div class="flex items-center gap-3 mb-8 pb-4 border-b border-gray-100">
+                        <div class="bg-escala-green/10 p-3 rounded-xl text-escala-green">
+                            <i data-lucide="user" class="w-6 h-6"></i>
+                        </div>
+                        <h2 class="text-xl font-black text-escala-dark">Información Básica</h2>
+                    </div>
+                    
+                    <form id="form-editar-usuario" method="POST" class="space-y-6">
+                        <div class="grid grid-cols-1 gap-6">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Nombre Completo <span class="text-red-500">*</span></label>
+                                <input type="text" name="nombre" value="<?php echo htmlspecialchars($usuario['nombre']); ?>" required 
+                                       class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:bg-white focus:border-transparent transition-all font-bold text-gray-800 placeholder-gray-400">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Email Corporativo <span class="text-red-500">*</span></label>
+                                <input type="email" name="email" value="<?php echo htmlspecialchars($usuario['email']); ?>" required 
+                                       class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:bg-white focus:border-transparent transition-all font-medium text-gray-700 placeholder-gray-400">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Rol de Acceso <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <select name="rol" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:bg-white focus:border-transparent appearance-none font-bold text-gray-700 cursor-pointer transition-all">
+                                        <option value="admin" <?php echo $usuario['rol']=='admin'?'selected':''; ?>>Admin (Limitado)</option>
+                                        <option value="superadmin" <?php echo $usuario['rol']=='superadmin'?'selected':''; ?>>Super Admin (Total)</option>
+                                    </select>
+                                    <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"></i>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-escala-green uppercase mb-2 tracking-wider">Nueva Contraseña</label>
+                                <div class="relative">
+                                    <input type="password" name="password" placeholder="Dejar en blanco para mantener" 
+                                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:bg-white focus:border-transparent transition-all text-sm placeholder-gray-400">
+                                    <i data-lucide="lock" class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"></i>
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-1 ml-1">Solo llénalo si deseas cambiar la clave actual.</p>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            <?php endif; ?>
+            </div>
 
-            <form method="POST" class="space-y-5">
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-28">
+                    <h2 class="text-lg font-black text-escala-dark mb-6">Acciones</h2>
+                    
+                    <button type="submit" form="form-editar-usuario" class="w-full py-4 bg-escala-green hover:bg-escala-dark text-white font-black rounded-xl shadow-lg shadow-escala-green/20 transition-all transform active:scale-95 text-sm uppercase tracking-widest flex items-center justify-center gap-2 mb-4">
+                        <i data-lucide="save" class="w-5 h-5"></i> Guardar Cambios
+                    </button>
+                    
+                    <a href="index.php" class="w-full py-4 text-center text-gray-500 font-bold hover:text-gray-700 hover:bg-gray-50 rounded-xl border border-gray-200 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                        <i data-lucide="x" class="w-4 h-4"></i> Cancelar
+                    </a>
+                </div>
                 
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-wider">Nombre Completo</label>
-                    <input type="text" name="nombre" value="<?php echo htmlspecialchars($usuario['nombre']); ?>" required 
-                           class="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-escala-blue focus:border-escala-blue focus:outline-none transition-all font-bold text-gray-700">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-wider">Email Corporativo</label>
-                    <input type="email" name="email" value="<?php echo htmlspecialchars($usuario['email']); ?>" required 
-                           class="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-escala-blue focus:border-escala-blue focus:outline-none transition-all font-medium text-gray-600">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-wider">Rol de Acceso</label>
-                    <div class="relative">
-                        <select name="rol" class="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-escala-blue focus:outline-none appearance-none font-bold text-slate-700">
-                            <option value="admin" <?php echo $usuario['rol']=='admin'?'selected':''; ?>>Admin (Limitado)</option>
-                            <option value="superadmin" <?php echo $usuario['rol']=='superadmin'?'selected':''; ?>>Super Admin (Total)</option>
-                        </select>
-                        <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"></i>
+                <div class="bg-blue-50 rounded-2xl border border-blue-100 p-6 flex items-start gap-4">
+                    <i data-lucide="info" class="w-6 h-6 text-blue-500 shrink-0 mt-0.5"></i>
+                    <div>
+                        <h3 class="font-bold text-blue-700 mb-1">Nota de Seguridad</h3>
+                        <p class="text-xs text-blue-600 leading-relaxed">
+                            Los cambios en roles y contraseñas se reflejarán inmediatamente. Asegúrate de notificar al usuario si se han modificado sus credenciales de acceso.
+                        </p>
                     </div>
                 </div>
+            </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-escala-blue uppercase mb-1 tracking-wider">Nueva Contraseña</label>
-                    <input type="password" name="password" placeholder="Dejar en blanco para mantener la actual" 
-                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-escala-blue focus:outline-none transition-all placeholder-gray-400 text-sm">
-                </div>
-
-                <div class="flex items-center gap-3 pt-4">
-                    <a href="index.php" class="w-1/2 py-3.5 text-center text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors">
-                        Cancelar
-                    </a>
-                    <button type="submit" class="w-1/2 py-3.5 bg-escala-blue hover:bg-escala-blue/90 text-white font-bold rounded-xl shadow-lg shadow-escala-blue/20 transition-all transform active:scale-95">
-                        Guardar Cambios
-                    </button>
-                </div>
-
-            </form>
         </div>
-    </div>
+    </main>
 
-    <script>lucide.createIcons();</script>
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>
