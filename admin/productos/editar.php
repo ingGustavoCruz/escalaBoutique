@@ -1,11 +1,10 @@
 <?php
 /**
- * admin/productos/editar.php - Edición Avanzada con Control de Precios y Estado
+ * admin/productos/editar.php - Edición Avanzada con Control de Precios y Estado (CORREGIDO)
  */
 session_start();
 require_once '../../api/conexion.php';
 
-// Seguridad
 if (!isset($_SESSION['admin_id']) || !isset($_GET['id'])) { header("Location: index.php"); exit; }
 
 $id = (int)$_GET['id'];
@@ -14,7 +13,7 @@ $msg = '';
 // --- LÓGICA DE PROCESAMIENTO (POST) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
-    // 1. Datos Básicos y Control
+    // 1. Datos Básicos
     $nombre = $_POST['nombre'];
     $cat = $_POST['categoria'];
     $desc_c = $_POST['descripcion_corta'];
@@ -22,32 +21,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stock_simple = (int)$_POST['stock_simple'];
     $calif = (float)$_POST['calificacion'];
 
-    // 2. Lógica de Precios
-    // 'precio_regular' es lo que antes costaba (precio_anterior en BD)
-    // 'nuevo_precio' es lo que cuesta ahora (precio en BD)
+    // 2. Precios
     $precio_anterior = !empty($_POST['precio_regular']) ? (float)$_POST['precio_regular'] : NULL;
     $precio_actual = (float)$_POST['nuevo_precio'];
 
-    // 3. Toggles (Si vienen en POST es 1, si no es 0)
-    $estado = isset($_POST['estado']) ? 1 : 0; // Columna 'activo' (necesitas crearla si no existe, o usar lógica inversa)
-    // NOTA: Como en tu BD no vi columna 'activo', asumo que usaremos 'stock = 0' para ocultar o crearemos la columna. 
-    // Para este ejemplo, usaré una lógica visual: Si está desactivado, ponemos stock -1 (convención) o simplemente lo guardamos en un campo nuevo si lo agregas.
-    // Viendo tu estructura [image_d51fb9.png], NO TIENES columna 'activo'. 
-    // SUGERENCIA: Agrega `ALTER TABLE productos ADD COLUMN activo TINYINT(1) DEFAULT 1;`
-    // Por ahora, lo guardaré en una variable, pero asegúrate de tener el campo en la BD.
-    
+    // 3. Toggles (Checkbox envía 'on' si está marcado, nada si no)
+    // Usamos isset() porque si el checkbox no se marca, no se envía nada en $_POST
+    $estado = isset($_POST['estado']) ? 1 : 0;
     $es_top = isset($_POST['es_top']) ? 1 : 0;
     $en_oferta = isset($_POST['en_oferta']) ? 1 : 0;
 
-    // Actualizamos tabla productos
-    // NOTA: Agregué 'precio_anterior', 'es_top', 'en_oferta', 'calificacion'
-    // Si agregaste la columna 'activo', añádela al query.
-    $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, precio=?, precio_anterior=?, descripcion_corta=?, descripcion_larga=?, stock=?, es_top=?, en_oferta=?, calificacion=? WHERE id=?");
-    $stmt->bind_param("ssddssiiidi", $nombre, $cat, $precio_actual, $precio_anterior, $desc_c, $desc_l, $stock_simple, $es_top, $en_oferta, $calif, $id);
+    // Actualizamos
+    $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, precio=?, precio_anterior=?, descripcion_corta=?, descripcion_larga=?, stock=?, es_top=?, en_oferta=?, calificacion=?, activo=? WHERE id=?");
+    $stmt->bind_param("ssddssiiidii", $nombre, $cat, $precio_actual, $precio_anterior, $desc_c, $desc_l, $stock_simple, $es_top, $en_oferta, $calif, $estado, $id);
     
     if ($stmt->execute()) {
-        
-        // 4. Variantes (Igual que antes)
+        // ... (Lógica de Variantes e Imágenes se mantiene igual) ...
+        // Re-insertar variantes
         $conn->query("DELETE FROM inventario_tallas WHERE producto_id = $id");
         if (isset($_POST['tallas']) && is_array($_POST['tallas'])) {
             $tallas = $_POST['tallas'];
@@ -62,8 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-
-        // 5. Imágenes (Igual que antes)
+        // Gestión de Imágenes
         if (isset($_POST['accion_imagen'])) {
             if ($_POST['accion_imagen'] === 'cambiar_portada' && isset($_POST['id_portada'])) {
                 $idPortada = (int)$_POST['id_portada'];
@@ -79,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conn->query("DELETE FROM imagenes_productos WHERE id = $idBorrar");
             }
         }
-
+        // Nuevas Imágenes
         if (isset($_FILES['nuevas_imagenes'])) {
             $archivos = $_FILES['nuevas_imagenes'];
             $total = count($archivos['name']);
@@ -95,18 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-
         $msg = "Producto actualizado correctamente.";
     } else {
         $msg = "Error al actualizar: " . $conn->error;
     }
 }
 
-// --- CONSULTA DE DATOS ---
+// --- CONSULTA ---
 $prod = $conn->query("SELECT * FROM productos WHERE id = $id")->fetch_assoc();
 if (!$prod) { echo "Producto no encontrado"; exit; }
 
-// Variantes
+// Variantes y Datos para Alpine
 $resVar = $conn->query("SELECT talla, stock FROM inventario_tallas WHERE producto_id = $id ORDER BY id ASC");
 $variantes = [];
 while ($row = $resVar->fetch_assoc()) { $variantes[] = ['t' => $row['talla'], 's' => $row['stock']]; }
@@ -126,22 +114,8 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
     <script src="https://unpkg.com/lucide@latest"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: { colors: { 'escala-green': '#00524A', 'escala-beige': '#AA9482', 'escala-dark': '#003d36' } }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { 'escala-green': '#00524A', 'escala-beige': '#AA9482', 'escala-dark': '#003d36' } } } }
     </script>
-    <style>
-        /* Toggles Switch CSS */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #00524A;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #00524A;
-        }
-    </style>
 </head>
 <body class="bg-slate-50 font-sans min-h-screen pb-10">
 
@@ -175,13 +149,16 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                   hasVariants: <?php echo $tieneVariantes; ?>,
                   precioRegular: <?php echo $prod['precio_anterior'] > 0 ? $prod['precio_anterior'] : $prod['precio']; ?>,
                   precioNuevo: <?php echo $prod['precio']; ?>,
+                  
+                  // ESTADO INICIAL DESDE PHP A ALPINE (SOLUCIÓN)
+                  activo: <?php echo $prod['activo'] == 1 ? 'true' : 'false'; ?>,
+                  esTop: <?php echo $prod['es_top'] == 1 ? 'true' : 'false'; ?>,
                   enOferta: <?php echo $prod['en_oferta'] == 1 ? 'true' : 'false'; ?>,
+
                   calcDescuento() {
                       if(this.enOferta) {
-                          // Sugerir 20% descuento si oferta se activa
                           this.precioNuevo = (this.precioRegular * 0.8).toFixed(2);
                       } else {
-                          // Si se apaga oferta, igualar precios
                           this.precioNuevo = this.precioRegular;
                       }
                   }
@@ -191,19 +168,27 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                 
                 <div class="flex items-center gap-3">
                     <span class="text-xs font-black text-gray-500 uppercase">ESTADO:</span>
-                    <label for="estado" class="flex items-center cursor-pointer relative">
-                        <input type="checkbox" name="estado" id="estado" class="sr-only" checked> <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 toggle-label transition-colors duration-200 ease-in-out"></div>
-                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform translate-x-0"></div>
-                        <span class="ml-3 text-sm font-bold text-slate-700">Activado</span>
+                    <label class="flex items-center cursor-pointer relative">
+                        <input type="checkbox" name="estado" class="sr-only" x-model="activo">
+                        
+                        <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 transition-colors duration-200 ease-in-out" 
+                             :class="activo ? '!bg-green-500 !border-green-500' : ''"></div>
+                        
+                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" 
+                             :class="activo ? 'translate-x-5' : 'translate-x-0'"></div>
+                        
+                        <span class="ml-3 text-sm font-bold" :class="activo ? 'text-green-600' : 'text-gray-400'" x-text="activo ? 'Visible' : 'Oculto'"></span>
                     </label>
                 </div>
 
                 <div class="flex items-center gap-3">
                     <span class="text-xs font-black text-gray-500 uppercase">DESTACADO:</span>
-                    <label for="es_top" class="flex items-center cursor-pointer relative">
-                        <input type="checkbox" name="es_top" id="es_top" class="sr-only" <?php echo $prod['es_top'] ? 'checked' : ''; ?>>
-                        <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 toggle-label transition-colors duration-200 ease-in-out" :class="$el.previousElementSibling.checked ? '!bg-escala-dark' : ''"></div>
-                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" :class="$el.previousElementSibling.previousElementSibling.checked ? 'translate-x-5' : 'translate-x-0'"></div>
+                    <label class="flex items-center cursor-pointer relative">
+                        <input type="checkbox" name="es_top" class="sr-only" x-model="esTop">
+                        <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 transition-colors duration-200 ease-in-out" 
+                             :class="esTop ? '!bg-escala-dark !border-escala-dark' : ''"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" 
+                             :class="esTop ? 'translate-x-5' : 'translate-x-0'"></div>
                         <span class="ml-3 text-sm font-bold text-slate-700">Top Ventas</span>
                     </label>
                 </div>
@@ -212,15 +197,16 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                     <span class="text-xs font-black text-gray-500 uppercase">PROMOCIÓN:</span>
                     <label class="flex items-center cursor-pointer relative">
                         <input type="checkbox" name="en_oferta" class="sr-only" x-model="enOferta" @change="calcDescuento()">
-                        <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 transition-colors duration-200 ease-in-out" :class="enOferta ? '!bg-blue-600' : ''"></div>
-                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" :class="enOferta ? 'translate-x-5' : 'translate-x-0'"></div>
+                        <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 transition-colors duration-200 ease-in-out" 
+                             :class="enOferta ? '!bg-blue-600 !border-blue-600' : ''"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" 
+                             :class="enOferta ? 'translate-x-5' : 'translate-x-0'"></div>
                         <span class="ml-3 text-sm font-bold text-slate-700">En Oferta</span>
                     </label>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
                 <div class="lg:col-span-2 space-y-6">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                         <h2 class="font-bold text-gray-700 uppercase text-xs mb-6 border-b pb-2">Información Básica</h2>
@@ -256,7 +242,6 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                         <input type="number" step="0.01" name="precio_regular" x-model="precioRegular" @input="if(enOferta) calcDescuento()" class="w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-500">
                                     </div>
                                 </div>
-                                
                                 <div>
                                     <label class="block text-xs font-black text-slate-500 uppercase mb-1">
                                         <span x-show="enOferta" class="text-blue-600">Nuevo Precio (-20% Sugerido)</span>
@@ -267,7 +252,6 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                         <input type="number" step="0.01" name="nuevo_precio" x-model="precioNuevo" class="w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-black text-xl text-escala-dark">
                                     </div>
                                 </div>
-
                                 <div x-show="!hasVariants">
                                     <label class="block text-xs font-black text-slate-500 uppercase mb-1">Stock Disponible</label>
                                     <input type="number" name="stock_simple" value="<?php echo $prod['stock']; ?>" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-700">
@@ -279,7 +263,6 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                             <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Descripción Corta</label>
                             <textarea name="descripcion_corta" rows="2" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-sm"><?php echo htmlspecialchars($prod['descripcion_corta']); ?></textarea>
                         </div>
-
                         <div class="mb-0">
                             <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Descripción Larga</label>
                             <textarea name="descripcion_larga" rows="4" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-sm"><?php echo htmlspecialchars($prod['descripcion_larga']); ?></textarea>
@@ -298,11 +281,8 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                 </div>
                             </label>
                         </div>
-
                         <div x-show="hasVariants" x-cloak>
-                            <div class="bg-gray-50 border border-gray-100 rounded-xl p-4" 
-                                 x-data="{ rows: <?php echo empty($variantes) ? "[{t:'', s:0}]" : $jsonVariantes; ?> }">
-                                
+                            <div class="bg-gray-50 border border-gray-100 rounded-xl p-4" x-data="{ rows: <?php echo empty($variantes) ? "[{t:'', s:0}]" : $jsonVariantes; ?> }">
                                 <template x-for="(row, index) in rows" :key="index">
                                     <div class="flex gap-3 mb-3">
                                         <input type="text" name="tallas[]" x-model="row.t" placeholder="Ej: M, G, 28, 30" class="w-1/2 px-4 py-2 border rounded-lg text-sm uppercase font-bold focus:outline-none shadow-sm">
@@ -310,22 +290,20 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                         <button type="button" @click="rows.splice(index, 1)" class="text-red-400 hover:text-red-600 px-2 bg-white rounded shadow-sm border border-gray-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                                     </div>
                                 </template>
-                                
                                 <button type="button" @click="rows.push({t:'', s:0})" class="mt-2 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:border-escala-green hover:text-escala-green transition-colors flex items-center justify-center gap-2">
                                     <i data-lucide="plus" class="w-4 h-4"></i> Agregar Variantes
                                 </button>
                             </div>
                         </div>
                         <div x-show="!hasVariants" class="text-center py-4 text-gray-400 text-xs italic">
-                            Gestión de stock simple activa (usar campo superior).
+                            Gestión de stock simple activa.
                         </div>
                     </div>
                 </div>
 
                 <div class="space-y-6">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h2 class="font-bold text-gray-700 uppercase text-xs mb-4 border-b pb-2">Galería de Imágenes</h2>
-                        
+                        <h2 class="font-bold text-gray-700 uppercase text-xs mb-4 border-b pb-2">Galería</h2>
                         <div class="grid grid-cols-2 gap-3 mb-4">
                             <?php 
                             if ($resImg && $resImg->num_rows > 0): 
@@ -347,14 +325,12 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                 <p class="text-xs text-gray-400 col-span-2 text-center py-4">Sin imágenes.</p>
                             <?php endif; ?>
                         </div>
-
                         <div class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors relative">
                              <input type="file" name="nuevas_imagenes[]" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*">
                              <i data-lucide="image-plus" class="w-8 h-8 mx-auto text-gray-300 mb-2"></i>
                              <p class="text-xs text-gray-400 font-bold">Subir más fotos</p>
                         </div>
                     </div>
-
                     <button type="submit" class="w-full py-4 bg-escala-green hover:bg-escala-dark text-white rounded-xl font-black uppercase shadow-lg hover:shadow-xl transition-all flex justify-center gap-2 transform hover:-translate-y-1 text-sm tracking-widest">
                         <i data-lucide="save" class="w-5 h-5"></i> Guardar Cambios
                     </button>
