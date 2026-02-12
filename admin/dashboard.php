@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/dashboard.php - Dashboard Pro con Reportes y Gráficos (RESPONSIVO)
+ * admin/dashboard.php - Dashboard Pro Protegido con CSRF
  */
 session_start();
 require_once '../api/conexion.php';
@@ -10,6 +10,9 @@ $ruta_base = "../";
 
 // Seguridad
 if (!isset($_SESSION['admin_id'])) { header("Location: index.php"); exit; }
+
+// CIRUGÍA: Validar escudo CSRF (Solo se activará si detecta un envío POST)
+validar_csrf(); 
 
 // --- 1. LÓGICA DE EXPORTACIÓN A EXCEL (CSV) ---
 if (isset($_GET['export']) && $_GET['export'] == 'true') {
@@ -35,38 +38,31 @@ if (isset($_GET['export']) && $_GET['export'] == 'true') {
 $fecha_inicio = isset($_GET['desde']) ? $_GET['desde'] : date('Y-m-01');
 $fecha_fin = isset($_GET['hasta']) ? $_GET['hasta'] : date('Y-m-t');
 
-// --- 3. CONSULTAS KPI (Filtradas por fecha) ---
-// Ventas Periodo
+// --- 3. CONSULTAS KPI ---
 $sqlVentas = "SELECT COALESCE(SUM(monto_total), 0) FROM pedidos WHERE estado != 'cancelado' AND date(fecha_pedido) BETWEEN '$fecha_inicio' AND '$fecha_fin'";
 $ventasPeriodo = $conn->query($sqlVentas)->fetch_row()[0];
 
-// Pedidos Periodo
 $sqlPedidos = "SELECT COUNT(*) FROM pedidos WHERE date(fecha_pedido) BETWEEN '$fecha_inicio' AND '$fecha_fin'";
 $pedidosPeriodo = $conn->query($sqlPedidos)->fetch_row()[0];
 
-// Nuevos Empleados (Clientes)
 $sqlNuevos = "SELECT COUNT(*) FROM empleados WHERE date(fecha_ultimo_acceso) BETWEEN '$fecha_inicio' AND '$fecha_fin'";
 $nuevosPeriodo = $conn->query($sqlNuevos)->fetch_row()[0];
 
-// Inventario Crítico
 $sqlCritico = "SELECT COUNT(*) FROM productos WHERE stock <= 5";
 $critico = $conn->query($sqlCritico)->fetch_row()[0];
 
 
 // --- 4. DATOS PARA GRÁFICAS (Chart.js) ---
-
-// Gráfica 1: Tendencia de Ventas (Últimos 6 meses)
 $chartLabels = []; $chartData = [];
 $sqlTrend = "SELECT DATE_FORMAT(fecha_pedido, '%Y-%m') as mes, SUM(monto_total) as total 
              FROM pedidos WHERE estado != 'cancelado' 
              GROUP BY mes ORDER BY mes DESC LIMIT 6";
 $resTrend = $conn->query($sqlTrend);
 while($row = $resTrend->fetch_assoc()) {
-    array_unshift($chartLabels, date('M Y', strtotime($row['mes'].'-01'))); // Invertir orden para cronología
+    array_unshift($chartLabels, date('M Y', strtotime($row['mes'].'-01'))); 
     array_unshift($chartData, $row['total']);
 }
 
-// Gráfica 2: Top Áreas (Dona)
 $areaLabels = []; $areaData = [];
 $sqlArea = "SELECT e.area, COUNT(p.id) as compras 
             FROM pedidos p JOIN empleados e ON p.empleado_id = e.id 
@@ -78,7 +74,6 @@ while($row = $resArea->fetch_assoc()) {
     $areaData[] = $row['compras'];
 }
 
-// Lista: Top Productos
 $topProductos = $conn->query("
     SELECT p.nombre, SUM(dp.cantidad) as vendidos, p.stock 
     FROM detalles_pedido dp JOIN productos p ON dp.producto_id = p.id 
@@ -87,7 +82,6 @@ $topProductos = $conn->query("
     GROUP BY p.id ORDER BY vendidos DESC LIMIT 5
 ");
 
-// Lista: Empleados VIP (Más gasto)
 $topEmpleados = $conn->query("
     SELECT e.nombre, e.area, COUNT(p.id) as ordenes, SUM(p.monto_total) as total
     FROM pedidos p JOIN empleados e ON p.empleado_id = e.id
@@ -142,6 +136,8 @@ $topEmpleados = $conn->query("
                 
                 <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
                     <form class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 w-full md:w-auto justify-center">
+                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
                         <span class="text-[10px] font-bold text-gray-400 uppercase ml-2 hidden md:inline">Periodo:</span>
                         <input type="date" name="desde" value="<?php echo $fecha_inicio; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
                         <span class="text-gray-300">-</span>
@@ -216,7 +212,6 @@ $topEmpleados = $conn->query("
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
                     <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
                             <i data-lucide="star" class="w-4 h-4 text-yellow-500"></i> Top Productos
@@ -279,10 +274,8 @@ $topEmpleados = $conn->query("
 
     <script>
         lucide.createIcons();
-
-        // --- CONFIGURACIÓN DE GRÁFICAS ---
         
-        // 1. Gráfica de Ventas
+        // --- CONFIGURACIÓN DE GRÁFICAS ---
         const ctxSales = document.getElementById('salesChart').getContext('2d');
         new Chart(ctxSales, {
             type: 'line',
@@ -310,7 +303,6 @@ $topEmpleados = $conn->query("
             }
         });
 
-        // 2. Gráfica de Áreas
         const ctxArea = document.getElementById('areaChart').getContext('2d');
         new Chart(ctxArea, {
             type: 'doughnut',
