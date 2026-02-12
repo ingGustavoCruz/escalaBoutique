@@ -25,4 +25,24 @@ function get_config($clave, $conn) {
     
     return $fila['valor'] ?? null;
 }
+
+// ... al final de api/conexion.php ...
+
+// Generar Token CSRF si no existe en la sesión
+if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+/**
+ * Función para validar el token en cada petición POST
+ */
+function validar_csrf() {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => 'Error de seguridad: Token CSRF inválido.']);
+            exit;
+        }
+    }
+}
 ?>

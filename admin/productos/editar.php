@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/productos/editar.php - Edición Avanzada con Control de Precios y Estado (CORREGIDO)
+ * admin/productos/editar.php - Edición Avanzada Protegida con CSRF
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -12,6 +12,9 @@ $msg = '';
 
 // --- LÓGICA DE PROCESAMIENTO (POST) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // CIRUGÍA: Validar escudo CSRF antes de procesar cualquier cambio
+    validar_csrf(); 
     
     // 1. Datos Básicos
     $nombre = $_POST['nombre'];
@@ -25,8 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $precio_anterior = !empty($_POST['precio_regular']) ? (float)$_POST['precio_regular'] : NULL;
     $precio_actual = (float)$_POST['nuevo_precio'];
 
-    // 3. Toggles (Checkbox envía 'on' si está marcado, nada si no)
-    // Usamos isset() porque si el checkbox no se marca, no se envía nada en $_POST
+    // 3. Toggles
     $estado = isset($_POST['estado']) ? 1 : 0;
     $es_top = isset($_POST['es_top']) ? 1 : 0;
     $en_oferta = isset($_POST['en_oferta']) ? 1 : 0;
@@ -36,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("ssddssiiidii", $nombre, $cat, $precio_actual, $precio_anterior, $desc_c, $desc_l, $stock_simple, $es_top, $en_oferta, $calif, $estado, $id);
     
     if ($stmt->execute()) {
-        // ... (Lógica de Variantes e Imágenes se mantiene igual) ...
         // Re-insertar variantes
         $conn->query("DELETE FROM inventario_tallas WHERE producto_id = $id");
         if (isset($_POST['tallas']) && is_array($_POST['tallas'])) {
@@ -149,12 +150,9 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                   hasVariants: <?php echo $tieneVariantes; ?>,
                   precioRegular: <?php echo $prod['precio_anterior'] > 0 ? $prod['precio_anterior'] : $prod['precio']; ?>,
                   precioNuevo: <?php echo $prod['precio']; ?>,
-                  
-                  // ESTADO INICIAL DESDE PHP A ALPINE (SOLUCIÓN)
                   activo: <?php echo $prod['activo'] == 1 ? 'true' : 'false'; ?>,
                   esTop: <?php echo $prod['es_top'] == 1 ? 'true' : 'false'; ?>,
                   enOferta: <?php echo $prod['en_oferta'] == 1 ? 'true' : 'false'; ?>,
-
                   calcDescuento() {
                       if(this.enOferta) {
                           this.precioNuevo = (this.precioRegular * 0.8).toFixed(2);
@@ -164,19 +162,17 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                   }
               }">
             
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-wrap items-center justify-between gap-6">
-                
                 <div class="flex items-center gap-3">
                     <span class="text-xs font-black text-gray-500 uppercase">ESTADO:</span>
                     <label class="flex items-center cursor-pointer relative">
                         <input type="checkbox" name="estado" class="sr-only" x-model="activo">
-                        
                         <div class="w-11 h-6 bg-gray-200 rounded-full border border-gray-200 transition-colors duration-200 ease-in-out" 
                              :class="activo ? '!bg-green-500 !border-green-500' : ''"></div>
-                        
                         <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition shadow-sm transform" 
                              :class="activo ? 'translate-x-5' : 'translate-x-0'"></div>
-                        
                         <span class="ml-3 text-sm font-bold" :class="activo ? 'text-green-600' : 'text-gray-400'" x-text="activo ? 'Visible' : 'Oculto'"></span>
                     </label>
                 </div>
@@ -210,7 +206,6 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                 <div class="lg:col-span-2 space-y-6">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                         <h2 class="font-bold text-gray-700 uppercase text-xs mb-6 border-b pb-2">Información Básica</h2>
-                        
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div>
                                 <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Nombre del Producto</label>
@@ -219,7 +214,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Categoría</label>
-                                    <select name="categoria" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-gray-700">
+                                    <select name="categoria" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-gray-700 text-sm">
                                         <?php $cats = ['ropa','souvenirs','accesorios','general']; ?>
                                         <?php foreach($cats as $c): ?>
                                             <option value="<?php echo $c; ?>" <?php echo $prod['categoria']==$c?'selected':''; ?>><?php echo ucfirst($c); ?></option>
@@ -228,7 +223,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                 </div>
                                 <div>
                                     <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Calificación (0-5)</label>
-                                    <input type="number" step="0.1" max="5" min="0" name="calificacion" value="<?php echo $prod['calificacion']; ?>" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none font-bold text-yellow-600">
+                                    <input type="number" step="0.1" max="5" min="0" name="calificacion" value="<?php echo $prod['calificacion']; ?>" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none font-bold text-yellow-600 text-sm">
                                 </div>
                             </div>
                         </div>
@@ -236,15 +231,15 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                         <div class="bg-blue-50/50 p-6 rounded-xl border border-blue-100 mb-6">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
-                                    <label class="block text-xs font-black text-slate-500 uppercase mb-1">Precio Regular (Antes)</label>
+                                    <label class="block text-xs font-black text-slate-500 uppercase mb-1">Precio Regular</label>
                                     <div class="relative">
                                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                                        <input type="number" step="0.01" name="precio_regular" x-model="precioRegular" @input="if(enOferta) calcDescuento()" class="w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-500">
+                                        <input type="number" step="0.01" name="precio_regular" x-model="precioRegular" @input="if(enOferta) calcDescuento()" class="w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-500 text-sm">
                                     </div>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-black text-slate-500 uppercase mb-1">
-                                        <span x-show="enOferta" class="text-blue-600">Nuevo Precio (-20% Sugerido)</span>
+                                        <span x-show="enOferta" class="text-blue-600">Nuevo Precio (-20%)</span>
                                         <span x-show="!enOferta">Precio Actual</span>
                                     </label>
                                     <div class="relative">
@@ -254,7 +249,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                                 </div>
                                 <div x-show="!hasVariants">
                                     <label class="block text-xs font-black text-slate-500 uppercase mb-1">Stock Disponible</label>
-                                    <input type="number" name="stock_simple" value="<?php echo $prod['stock']; ?>" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-700">
+                                    <input type="number" name="stock_simple" value="<?php echo $prod['stock']; ?>" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green font-bold text-gray-700 text-sm">
                                 </div>
                             </div>
                         </div>
@@ -263,7 +258,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                             <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Descripción Corta</label>
                             <textarea name="descripcion_corta" rows="2" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-sm"><?php echo htmlspecialchars($prod['descripcion_corta']); ?></textarea>
                         </div>
-                        <div class="mb-0">
+                        <div>
                             <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Descripción Larga</label>
                             <textarea name="descripcion_larga" rows="4" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-escala-green focus:outline-none text-sm"><?php echo htmlspecialchars($prod['descripcion_larga']); ?></textarea>
                         </div>
@@ -285,7 +280,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                             <div class="bg-gray-50 border border-gray-100 rounded-xl p-4" x-data="{ rows: <?php echo empty($variantes) ? "[{t:'', s:0}]" : $jsonVariantes; ?> }">
                                 <template x-for="(row, index) in rows" :key="index">
                                     <div class="flex gap-3 mb-3">
-                                        <input type="text" name="tallas[]" x-model="row.t" placeholder="Ej: M, G, 28, 30" class="w-1/2 px-4 py-2 border rounded-lg text-sm uppercase font-bold focus:outline-none shadow-sm">
+                                        <input type="text" name="tallas[]" x-model="row.t" placeholder="Talla" class="w-1/2 px-4 py-2 border rounded-lg text-sm uppercase font-bold focus:outline-none shadow-sm">
                                         <input type="number" name="stocks[]" x-model="row.s" placeholder="Cant." class="w-1/3 px-4 py-2 border rounded-lg text-sm font-bold focus:outline-none shadow-sm">
                                         <button type="button" @click="rows.splice(index, 1)" class="text-red-400 hover:text-red-600 px-2 bg-white rounded shadow-sm border border-gray-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                                     </div>
@@ -305,11 +300,7 @@ $resImg = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id = $id
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                         <h2 class="font-bold text-gray-700 uppercase text-xs mb-4 border-b pb-2">Galería</h2>
                         <div class="grid grid-cols-2 gap-3 mb-4">
-                            <?php 
-                            if ($resImg && $resImg->num_rows > 0): 
-                                $resImg->data_seek(0);
-                                while($img = $resImg->fetch_assoc()):
-                            ?>
+                            <?php if ($resImg && $resImg->num_rows > 0): $resImg->data_seek(0); while($img = $resImg->fetch_assoc()): ?>
                                 <div class="relative group border rounded-lg overflow-hidden <?php echo $img['es_principal']?'ring-2 ring-escala-green':''; ?>">
                                     <img src="../../<?php echo $img['url_imagen']; ?>" class="w-full h-24 object-cover">
                                     <?php if($img['es_principal']): ?>

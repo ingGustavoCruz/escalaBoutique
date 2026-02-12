@@ -13,6 +13,10 @@ $mensaje = "";
 
 // --- PROCESAR ACTUALIZACIÓN ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // CIRUGÍA: Validar escudo CSRF antes de guardar cambios
+    validar_csrf(); 
+
     $configuraciones = [
         'email_nomina' => $_POST['email_nomina'],
         'email_almacen' => $_POST['email_almacen'],
@@ -71,6 +75,8 @@ $limite_qnas = get_config('limite_quincenas', $conn);
         <div class="max-w-2xl bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <form method="POST" class="p-8 space-y-6">
                 
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
                 <div class="space-y-2">
                     <label class="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                         <i data-lucide="mail" class="w-3 h-3"></i> Correo Directora de Nómina

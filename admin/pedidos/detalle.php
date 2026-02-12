@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/pedidos/detalle.php - Con Imagen corregida y Bitácora
+ * admin/pedidos/detalle.php - Con Imagen corregida, Bitácora e Integridad CSRF
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -15,8 +15,11 @@ $pedido_id = (int)$_GET['id'];
 
 // --- PROCESAR CAMBIO DE ESTADO ---
 $msg = '';
-// --- PROCESAR CAMBIO DE ESTADO ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
+    
+    // CIRUGÍA: Validar escudo CSRF antes de procesar el cambio
+    validar_csrf(); 
+    
     $nuevo_estado = $_POST['nuevo_estado'];
     
     // 1. Obtener estado anterior para bitácora y validación
@@ -41,7 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
                         $stmtStk->bind_param("ii", $item['cantidad'], $item['producto_id']);
                     }
                     $stmtStk->execute();
-                    // ... dentro del while ($item = $resDet->fetch_assoc()) y después de $stmtStk->execute()
+
+                    // Registro en Bitácora de Inventario
                     $motivo_cancel = "CANCELACIÓN PEDIDO #$pedido_id";
                     $admin_id = $_SESSION['admin_id'];
                     $stmtLogCan = $conn->prepare("INSERT INTO bitacora_inventario (producto_id, talla, cantidad_cambio, motivo, admin_id) VALUES (?, ?, ?, ?, ?)");
@@ -50,9 +54,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
                     $stmtLogCan->close();
                 }
             }
-
-            // B. Si el pedido estaba cancelado y se vuelve a poner en PENDIENTE/APROBADO (re-activación)
-            // Aquí deberías restar stock de nuevo, pero por simplicidad, enfoquémonos en la cancelación.
 
             // C. Actualizar estado y registrar bitácora
             $stmtUpd = $conn->prepare("UPDATE pedidos SET estado = ? WHERE id = ?");
@@ -76,8 +77,7 @@ $pedido = $conn->query($queryHead)->fetch_assoc();
 
 if (!$pedido) { echo "Pedido no encontrado"; exit; }
 
-// 2. Obtener Detalles (AHORA CON IMAGEN)
-// Agregamos la subconsulta para traer la URL de la imagen principal
+// 2. Obtener Detalles
 $queryDet = "
     SELECT dp.*, p.nombre, p.stock as stock_actual,
     (SELECT url_imagen FROM imagenes_productos ip WHERE ip.producto_id = p.id ORDER BY es_principal DESC LIMIT 1) as img
@@ -112,6 +112,8 @@ $detalles = $conn->query($queryDet);
             </div>
 
             <form method="POST" class="flex items-center gap-3">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
                 <a href="imprimir.php?id=<?php echo $pedido_id; ?>" target="_blank" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold uppercase shadow-sm flex items-center gap-2 border border-gray-300 transition-colors mr-2">
                     <i data-lucide="printer" class="w-4 h-4"></i> Recibo
                 </a>
@@ -145,7 +147,7 @@ $detalles = $conn->query($queryDet);
                         <h2 class="font-bold text-gray-700 uppercase text-sm flex items-center gap-2"><i data-lucide="package" class="w-4 h-4"></i> Productos Solicitados</h2>
                     </div>
                     <div class="divide-y divide-gray-100">
-                        <?php $detalles->data_seek(0); while($item = $detalles->fetch_assoc()): ?>
+                        <?php while($item = $detalles->fetch_assoc()): ?>
                         <div class="p-5 flex items-center gap-4 hover:bg-gray-50 transition-colors">
                             
                             <div class="w-14 h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200 p-1 overflow-hidden shrink-0">

@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/cupones/index.php - Versión Responsiva Final
+ * admin/cupones/index.php - Versión Protegida con CSRF
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -13,54 +13,58 @@ if (!isset($_SESSION['admin_id'])) { header("Location: ../index.php"); exit; }
 
 $msg = ''; $msgType = '';
 
-// --- LÓGICA PHP (Tu lógica original intacta) ---
+// --- 1. PROCESAR ACCIONES POST (Crear, Eliminar, Toggle) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // CIRUGÍA: Escudo de seguridad global para toda acción de escritura
+    validar_csrf();
 
-// 1. Crear Cupón
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_cupon'])) {
-    $nombre = trim($_POST['nombre_interno']);
-    $codigo = strtoupper(trim($_POST['codigo']));
-    $tipo = $_POST['tipo_descuento'];
-    $valor = (float)$_POST['valor'];
-    $limite = (int)$_POST['limite_usos'];
-    $vence = !empty($_POST['fecha_vencimiento']) ? $_POST['fecha_vencimiento'] : NULL;
+    // A. Crear Cupón
+    if (isset($_POST['crear_cupon'])) {
+        $nombre = trim($_POST['nombre_interno']);
+        $codigo = strtoupper(trim($_POST['codigo']));
+        $tipo = $_POST['tipo_descuento'];
+        $valor = (float)$_POST['valor'];
+        $limite = (int)$_POST['limite_usos'];
+        $vence = !empty($_POST['fecha_vencimiento']) ? $_POST['fecha_vencimiento'] : NULL;
 
-    if(empty($nombre) || empty($codigo) || $valor <= 0) {
-         $msg = "Faltan datos obligatorios."; $msgType = 'error';
-    } else {
-        $stmt = $conn->prepare("INSERT INTO cupones (nombre_interno, codigo, tipo_descuento, valor, limite_usos, fecha_vencimiento) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssdis", $nombre, $codigo, $tipo, $valor, $limite, $vence);
-        
-        try {
-            if ($stmt->execute()) {
-                registrarBitacora('CUPONES', 'CREAR', "Creó cupón: $codigo ($valor $tipo)", $conn);
-                $msg = "Cupón creado exitosamente."; $msgType = 'success';
-                header("Location: index.php?msg=created"); exit;
+        if(empty($nombre) || empty($codigo) || $valor <= 0) {
+             $msg = "Faltan datos obligatorios."; $msgType = 'error';
+        } else {
+            $stmt = $conn->prepare("INSERT INTO cupones (nombre_interno, codigo, tipo_descuento, valor, limite_usos, fecha_vencimiento) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssdis", $nombre, $codigo, $tipo, $valor, $limite, $vence);
+            
+            try {
+                if ($stmt->execute()) {
+                    registrarBitacora('CUPONES', 'CREAR', "Creó cupón: $codigo ($valor $tipo)", $conn);
+                    header("Location: index.php?msg=created"); exit;
+                }
+            } catch (mysqli_sql_exception $e) {
+                 $msg = ($e->getCode() == 1062) ? "Error: El código '$codigo' ya existe." : "Error en BD: " . $e->getMessage();
+                 $msgType = 'error';
             }
-        } catch (mysqli_sql_exception $e) {
-             $msg = ($e->getCode() == 1062) ? "Error: El código '$codigo' ya existe." : "Error en BD: " . $e->getMessage();
-             $msgType = 'error';
+        }
+    }
+
+    // B. Acciones de Tabla (Convertidas a POST por seguridad)
+    if (isset($_POST['action']) && isset($_POST['id'])) {
+        $id = (int)$_POST['id'];
+        $datoPrevio = $conn->query("SELECT codigo FROM cupones WHERE id=$id")->fetch_assoc();
+        $codRef = $datoPrevio['codigo'] ?? 'ID '.$id;
+
+        if ($_POST['action'] === 'delete') {
+            $conn->query("DELETE FROM cupones WHERE id = $id");
+            registrarBitacora('CUPONES', 'ELIMINAR', "Eliminó cupón: $codRef", $conn);
+            header("Location: index.php?msg=deleted"); exit;
+        } elseif ($_POST['action'] === 'toggle') {
+            $conn->query("UPDATE cupones SET estado = IF(estado='activo','inactivo','activo') WHERE id = $id");
+            registrarBitacora('CUPONES', 'ESTADO', "Cambió estado de cupón: $codRef", $conn);
+            header("Location: index.php?msg=toggled"); exit;
         }
     }
 }
 
-// 2. Acciones GET
-if (isset($_GET['action']) && isset($_GET['id'])) {
-    $id = (int)$_GET['id'];
-    $datoPrevio = $conn->query("SELECT codigo FROM cupones WHERE id=$id")->fetch_assoc();
-    $codRef = $datoPrevio['codigo'] ?? 'ID '.$id;
-
-    if ($_GET['action'] === 'delete') {
-        $conn->query("DELETE FROM cupones WHERE id = $id");
-        registrarBitacora('CUPONES', 'ELIMINAR', "Eliminó cupón: $codRef", $conn);
-        header("Location: index.php?msg=deleted"); exit;
-    } elseif ($_GET['action'] === 'toggle') {
-        $conn->query("UPDATE cupones SET estado = IF(estado='activo','inactivo','activo') WHERE id = $id");
-        registrarBitacora('CUPONES', 'ESTADO', "Cambió estado de cupón: $codRef", $conn);
-        header("Location: index.php?msg=toggled"); exit;
-    }
-}
-
-// Mensajes
+// Mensajes GET
 if (isset($_GET['msg'])) {
     if($_GET['msg']=='created') { $msg='Cupón creado correctamente.'; $msgType='success'; }
     if($_GET['msg']=='deleted') { $msg='Cupón eliminado.'; $msgType='success'; }
@@ -91,15 +95,12 @@ $cupones = $conn->query("SELECT *, (limite_usos > 0 AND usos_actuales >= limite_
 
         <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
             
-            <div class="md:hidden bg-white h-16 shadow-sm flex items-center justify-between px-4 z-10 border-b border-gray-200 flex-shrink-0">
+            <div class="md:hidden bg-white h-16 shadow-sm flex items-center justify-between px-4 z-20 border-b border-gray-200 flex-shrink-0">
                 <div class="flex items-center gap-3">
                     <button @click="sidebarOpen = true" class="text-gray-600 hover:text-escala-green focus:outline-none">
                         <i data-lucide="menu" class="w-6 h-6"></i>
                     </button>
                     <span class="font-black text-escala-green uppercase tracking-wide">Escala Admin</span>
-                </div>
-                <div class="w-8 h-8 bg-escala-green/10 rounded-full flex items-center justify-center text-escala-green font-bold text-xs">
-                    <?php echo substr($_SESSION['admin_nombre'] ?? 'A', 0, 1); ?>
                 </div>
             </div>
 
@@ -122,7 +123,9 @@ $cupones = $conn->query("SELECT *, (limite_usos > 0 AND usos_actuales >= limite_
                                 <i data-lucide="plus-circle" class="w-4 h-4 text-escala-green"></i> Nuevo Cupón
                             </h2>
                             <form method="POST" class="space-y-5">
+                                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                 <input type="hidden" name="crear_cupon" value="1">
+
                                 <div>
                                     <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Nombre Interno (Campaña)</label>
                                     <input type="text" name="nombre_interno" required placeholder="Ej. San Valentín" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-escala-green focus:outline-none font-medium text-gray-700 placeholder-gray-300">
@@ -177,7 +180,7 @@ $cupones = $conn->query("SELECT *, (limite_usos > 0 AND usos_actuales >= limite_
                                             <th class="px-6 py-4">Estado</th>
                                             <th class="px-6 py-4">Usos</th>
                                             <th class="px-6 py-4 text-right">Acciones</th>
-                                        </div>
+                                        </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-50 text-sm font-medium text-gray-600">
                                         <?php while($row = $cupones->fetch_assoc()): ?>
@@ -206,15 +209,27 @@ $cupones = $conn->query("SELECT *, (limite_usos > 0 AND usos_actuales >= limite_
                                             <td class="px-6 py-4 text-right">
                                                 <div class="flex items-center justify-end gap-2">
                                                     <button @click="showModal = true; couponForImage = {codigo: '<?php echo $row['codigo']; ?>', oferta: '<?php echo $row['tipo_descuento'] === 'porcentaje' ? round($row['valor']).'% DTO.' : '$'.number_format($row['valor'],0).' MXN'; ?>', nombre: '<?php echo $row['nombre_interno']; ?>'}" 
-                                                            class="p-2 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 transition-colors tooltip" title="Descargar Imagen">
+                                                            class="p-2 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 transition-colors" title="Descargar Imagen">
                                                         <i data-lucide="download" class="w-4 h-4"></i>
                                                     </button>
-                                                    <a href="index.php?action=toggle&id=<?php echo $row['id']; ?>" class="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors tooltip" title="Pausar/Activar">
-                                                        <i data-lucide="<?php echo $row['estado']==='activo' ? 'pause' : 'play'; ?>" class="w-4 h-4"></i>
-                                                    </a>
-                                                    <a href="index.php?action=delete&id=<?php echo $row['id']; ?>" onclick="return confirm('¿Eliminar cupón?')" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors tooltip" title="Eliminar">
-                                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                                    </a>
+                                                    
+                                                    <form method="POST" class="inline">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                                                        <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
+                                                        <input type="hidden" name="action" value="toggle">
+                                                        <button type="submit" class="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors" title="Pausar/Activar">
+                                                            <i data-lucide="<?php echo $row['estado']==='activo' ? 'pause' : 'play'; ?>" class="w-4 h-4"></i>
+                                                        </button>
+                                                    </form>
+
+                                                    <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar cupón?')">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                                                        <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <button type="submit" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors" title="Eliminar">
+                                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                                        </button>
+                                                    </form>
                                                 </div>
                                             </td>
                                         </tr>
@@ -271,7 +286,7 @@ $cupones = $conn->query("SELECT *, (limite_usos > 0 AND usos_actuales >= limite_
             const element = document.getElementById('coupon-capture-area');
             html2canvas(element, { scale: 2, backgroundColor: null }).then(canvas => {
                 const link = document.createElement('a');
-                link.download = 'Cupon-Escala-' + document.querySelector('[x-text="couponForImage?.codigo"]').innerText + '.png';
+                link.download = 'Cupon-Escala-' + (document.querySelector('[x-text="couponForImage?.codigo"]').innerText || 'CUPON') + '.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             });

@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/usuarios/editar.php - Versión Consistente con Diseño General
+ * admin/usuarios/editar.php - Versión Protegida con CSRF
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -23,6 +23,9 @@ $msg = '';
 
 // 3. PROCESAR FORMULARIO
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CIRUGÍA: Validar escudo CSRF antes de procesar cualquier dato
+    validar_csrf(); 
+    
     $nombre = trim($_POST['nombre']);
     $email = trim($_POST['email']);
     $rol = $_POST['rol'];
@@ -116,6 +119,8 @@ if (!$usuario) { die("Usuario no encontrado."); }
                     </div>
                     
                     <form id="form-editar-usuario" method="POST" class="space-y-6">
+                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+
                         <div class="grid grid-cols-1 gap-6">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Nombre Completo <span class="text-red-500">*</span></label>
@@ -138,7 +143,7 @@ if (!$usuario) { die("Usuario no encontrado."); }
                                         <option value="admin" <?php echo $usuario['rol']=='admin'?'selected':''; ?>>Admin (Limitado)</option>
                                         <option value="superadmin" <?php echo $usuario['rol']=='superadmin'?'selected':''; ?>>Super Admin (Total)</option>
                                     </select>
-                                    <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"></i>
+                                    <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"></i>
                                 </div>
                             </div>
 

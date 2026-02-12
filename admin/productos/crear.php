@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/productos/crear.php - Alta de Productos (Con Selector de Portada)
+ * admin/productos/crear.php - Alta de Productos (Protegida con CSRF)
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -14,6 +14,9 @@ if (!isset($_SESSION['admin_id'])) {
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CIRUGÍA: Validar escudo CSRF antes de procesar el alta
+    validar_csrf(); 
+    
     $nombre = $_POST['nombre'];
     $cat = $_POST['categoria'];
     $precio = (float)$_POST['precio'];
@@ -59,7 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ruta_bd = "imagenes/" . $nombre_archivo;
                     
                     if (move_uploaded_file($archivos['tmp_name'][$i], $ruta_destino)) {
-                        // Comparamos el índice actual ($i) con el seleccionado por el usuario ($indice_portada)
                         $es_principal = ($i === $indice_portada) ? 1 : 0;
                         $conn->query("INSERT INTO imagenes_productos (producto_id, url_imagen, es_principal) VALUES ($producto_id, '$ruta_bd', $es_principal)");
                     }
@@ -112,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="POST" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-3 gap-8" x-data="{ hasVariants: false }">
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
             
             <div class="md:col-span-2 space-y-6">
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
