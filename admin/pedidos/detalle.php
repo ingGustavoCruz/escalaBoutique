@@ -41,6 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nuevo_estado'])) {
                         $stmtStk->bind_param("ii", $item['cantidad'], $item['producto_id']);
                     }
                     $stmtStk->execute();
+                    // ... dentro del while ($item = $resDet->fetch_assoc()) y después de $stmtStk->execute()
+                    $motivo_cancel = "CANCELACIÓN PEDIDO #$pedido_id";
+                    $admin_id = $_SESSION['admin_id'];
+                    $stmtLogCan = $conn->prepare("INSERT INTO bitacora_inventario (producto_id, talla, cantidad_cambio, motivo, admin_id) VALUES (?, ?, ?, ?, ?)");
+                    $stmtLogCan->bind_param("isisi", $item['producto_id'], $item['talla'], $item['cantidad'], $motivo_cancel, $admin_id);
+                    $stmtLogCan->execute();
+                    $stmtLogCan->close();
                 }
             }
 

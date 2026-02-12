@@ -1,7 +1,7 @@
 <?php
 /**
  * api/procesar_pedido_nomina.php
- * Versión Final: Transacción BD + Notificación a RH + Confirmación al Empleado
+ * Versión Final: Transacción BD + Notificación a RH + Confirmación al Empleado + Auditoría de Inventario
  */
 
 session_start();
@@ -20,7 +20,6 @@ if (!isset($_SESSION['empleado_id_db'])) {
 $empleado_id = $_SESSION['empleado_id_db'];
 
 // DATOS DEL EMPLEADO (Recuperados de la sesión de login)
-// Es vital que $_SESSION['usuario_empleado']['email'] tenga el correo real del usuario.
 $empleado_nombre = $_SESSION['usuario_empleado']['nombre'] ?? 'Empleado';
 $empleado_num    = $_SESSION['usuario_empleado']['numero'] ?? 'S/N';
 $empleado_area   = $_SESSION['usuario_empleado']['area'] ?? 'General';
@@ -88,32 +87,40 @@ try {
         $stmtDetalle->execute();
         $stmtDetalle->close();
 
-        // C) Descontar Stock
+        // C) Descontar Stock y REGISTRAR EN BITÁCORA
+        $motivo_audit = "VENTA PEDIDO #$pedido_id";
+        $cambio_stock = $cantidad * -1; // Valor negativo para representar salida
+
         if ($talla) {
-            // 1. Si es producto con talla, restamos de la tabla de variantes
+            // 1. Si es producto con talla
             $stmtUpdateTalla = $conn->prepare("UPDATE inventario_tallas SET stock = stock - ? WHERE producto_id = ? AND talla = ?");
             $stmtUpdateTalla->bind_param("iis", $cantidad, $producto_id, $talla);
             if (!$stmtUpdateTalla->execute()) {
                 throw new Exception("Error al descontar stock de talla $talla.");
             }
             $stmtUpdateTalla->close();
+
+            // Auditoría Quirúrgica (Tallas)
+            $stmtLog = $conn->prepare("INSERT INTO bitacora_inventario (producto_id, talla, cantidad_cambio, motivo) VALUES (?, ?, ?, ?)");
+            $stmtLog->bind_param("isis", $producto_id, $talla, $cambio_stock, $motivo_audit);
+            $stmtLog->execute();
+            $stmtLog->close();
             
-            // IMPORTANTE: Si usaste el TRIGGER que te di en el Paso 1, 
-            // NO necesitas actualizar la tabla 'productos' manualmente, el trigger lo hará solo.
-            // Si NO usaste triggers, descomenta esto:
-            /*
-            $stmtUpdatePadre = $conn->prepare("UPDATE productos SET stock = stock - ? WHERE id = ?");
-            $stmtUpdatePadre->bind_param("ii", $cantidad, $producto_id);
-            $stmtUpdatePadre->execute();
-            */
         } else {
-            // 2. Si NO tiene talla (es accesorio), restamos directo al producto padre
+            // 2. Si NO tiene talla (es accesorio)
             $stmtUpdate = $conn->prepare("UPDATE productos SET stock = stock - ? WHERE id = ?");
             $stmtUpdate->bind_param("ii", $cantidad, $producto_id);
             if (!$stmtUpdate->execute()) {
                 throw new Exception("Error al actualizar inventario general.");
             }
             $stmtUpdate->close();
+
+            // Auditoría Quirúrgica (Global)
+            $null_talla = null;
+            $stmtLog = $conn->prepare("INSERT INTO bitacora_inventario (producto_id, talla, cantidad_cambio, motivo) VALUES (?, ?, ?, ?)");
+            $stmtLog->bind_param("isis", $producto_id, $null_talla, $cambio_stock, $motivo_audit);
+            $stmtLog->execute();
+            $stmtLog->close();
         }
 
         // Construir fila para el HTML del correo
@@ -135,10 +142,9 @@ try {
     $conn->commit();
 
     // --- 5. ENVIAR CORREOS ---
-    
     $asunto = "Confirmación Pedido #$pedido_id - Escala Boutique";
     
-    // Plantilla HTML (Idéntica para todos)
+    // Plantilla HTML
     $mensajeHTML = "
     <div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>
         <div style='background-color: #00524A; padding: 20px; text-align: center;'>
@@ -190,8 +196,6 @@ try {
         </div>
     </div>";
 
-    // --- LISTA DE DESTINATARIOS ---
-    // Aquí definimos quién recibe el correo.
     $email_nomina = get_config('email_nomina', $conn);
     $email_almacen = get_config('email_almacen', $conn);
 
