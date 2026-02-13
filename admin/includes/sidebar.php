@@ -79,3 +79,34 @@
         </a>
     </div>
 </aside>
+<script>
+/**
+ * Monitor de Actividad - Escala Boutique
+ * Detecta movimiento del mouse o teclado para resetear el timer.
+ */
+(function() {
+    let inactivityTimer;
+    // 20 minutos en milisegundos
+    const TIMEOUT = 1200000; 
+
+    const resetTimer = () => {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(logout, TIMEOUT);
+    };
+
+    const logout = () => {
+        // Redirección al archivo de logout existente
+        window.location.href = '/admin/logout.php?msg=timeout';
+    };
+
+    // Eventos que reinician el contador (Interacción real)
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    
+    events.forEach(name => {
+        document.addEventListener(name, resetTimer, true);
+    });
+
+    // Iniciar el contador al cargar
+    resetTimer();
+})();
+</script>
