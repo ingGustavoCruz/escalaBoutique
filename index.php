@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción Final (Optimizado y Verificado)
+ * Versión: Producción Final (Optimizado y Verificado con Lazy Loading)
  */
 session_start();
 error_reporting(E_ALL);
@@ -127,7 +127,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
         function appData() {
             return {
-                // Inyección segura de JSON
                 products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
                 coupon: <?php echo json_encode($cupon_activo); ?>,
                 couponCodeInput: '',
@@ -150,7 +149,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         setTimeout(() => lucide.createIcons(), 50);
                     }, 800);
 
-                    // Watchers optimizados
                     this.$watch('selectedProduct', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('cartOpen', () => setTimeout(() => lucide.createIcons(), 50));
                     this.$watch('currentCategory', () => setTimeout(() => lucide.createIcons(), 50));
@@ -159,7 +157,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     setInterval(() => { this.sincronizarStock(); }, 10000);
                 },
 
-                // Lógica de precio refactorizada
                 getPrice(p) {
                     let precio = parseFloat(p.precio_base);
                     if (this.coupon) {
@@ -294,7 +291,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         this.showPayrollModal = false;
                         if (data.status === 'success') {
                             this.showSuccess = true;
-                            // Optimistic UI Update
                             this.cart.forEach(itemCart => {
                                 let productEnTienda = this.products.find(p => p.id === itemCart.id);
                                 if (productEnTienda) {
@@ -511,6 +507,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="h-72 flex items-center justify-center mb-8 relative p-4">
                         <div class="w-full h-full flex items-center justify-center">
                             <img :src="(p.imagenes && p.imagenes.length > 0 && p.imagenes[activeImg]) ? p.imagenes[activeImg] : 'imagenes/torito.png'" 
+                                 loading="lazy"
                                  onerror="this.onerror=null; this.src='imagenes/torito.png';"
                                  class="max-h-full max-w-full object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-500">
                         </div>
@@ -627,7 +624,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
             <template x-for="(item, index) in cart" :key="index">
                 <div class="flex gap-2 items-center bg-white p-2 rounded-lg shadow-sm border border-gray-100 relative group">
                     <div class="w-10 h-10 bg-white rounded flex items-center justify-center shrink-0 p-0.5 border border-gray-100">
-                        <img :src="item.img" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
+                        <img :src="item.img" loading="lazy" class="max-h-full max-w-full object-contain" onerror="this.onerror=null; this.src='imagenes/torito.png';">
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
@@ -670,6 +667,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) 
                                 ? selectedProduct.imagenes[activeImgModal] 
                                 : 'imagenes/torito.png'" 
+                         loading="lazy"
                          onerror="this.onerror=null; this.src='imagenes/torito.png';"
                          class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
                     
