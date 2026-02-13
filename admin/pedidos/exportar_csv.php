@@ -1,7 +1,6 @@
 <?php
 /**
- * admin/pedidos/exportar_csv.php - Generador de Layout Filtrado
- * Versión: Sincronización Total (Quirúrgico)
+ * admin/pedidos/exportar_csv.php - Generador de Layout con Amortización Sincronizada
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -15,8 +14,15 @@ $f_inicio = $_GET['f_inicio'] ?? '';
 $f_fin    = $_GET['f_fin'] ?? '';
 $area_sel = $_GET['area'] ?? '';
 
-// 3. Construcción de Query Dinámica
-$where = "WHERE pn.estado = 'pendiente' AND p.estado = 'aprobado'";
+// 3. Construcción de Query Dinámica con Lógica de Una Cuota por Quincena
+$where = "WHERE pn.estado = 'pendiente' 
+          AND p.estado = 'aprobado' 
+          AND pn.id IN (
+              SELECT MIN(id) 
+              FROM pagos_nomina 
+              WHERE estado = 'pendiente' 
+              GROUP BY pedido_id
+          )";
 
 if (!empty($f_inicio)) {
     $where .= " AND p.fecha_pedido >= '" . $conn->real_escape_string($f_inicio) . " 00:00:00'";
@@ -42,23 +48,18 @@ $query = "
 $resultado = $conn->query($query);
 
 if ($resultado && $resultado->num_rows > 0) {
-    // Limpiar búfer para evitar basura en el archivo
     if (ob_get_length()) ob_clean();
 
     $filename = "Corte_Nomina_" . date('Y-m-d_H-i') . ".csv";
     
-    // Headers de descarga
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     header('Pragma: no-cache');
     header('Expires: 0');
 
     $output = fopen('php://output', 'w');
-    
-    // BOM para compatibilidad con acentos en Excel
     fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
     
-    // Encabezados del Layout solicitado
     fputcsv($output, ['No_Empleado', 'Nombre', 'Area', 'Pedido_ID', 'Total_Compra', 'Cuota_Actual', 'Monto_Quincenal']);
 
     $pagos_ids = [];
@@ -81,16 +82,15 @@ if ($resultado && $resultado->num_rows > 0) {
         if (!empty($pagos_ids)) {
             $lista = implode(',', $pagos_ids);
             
-            // A. Marcar cuotas como enviadas
+            // A. Marcar cuotas como enviadas (Solo la cuota procesada en este layout)
             $conn->query("UPDATE pagos_nomina SET estado = 'enviado', fecha_corte = NOW() WHERE id IN ($lista)");
             
-            // B. Marcado inteligente del pedido global (Solo si ya no tiene cuotas pendientes)
+            // B. Marcado inteligente del pedido global (Solo si ya no tiene cuotas pendientes reales)
             $conn->query("UPDATE pedidos p SET enviado_nomina = 1 
                           WHERE id IN (SELECT pedido_id FROM pagos_nomina WHERE id IN ($lista))
                           AND NOT EXISTS (SELECT 1 FROM pagos_nomina pn WHERE pn.pedido_id = p.id AND pn.estado = 'pendiente')");
             
-            // C. Registro en Bitácora con detalles del filtro
-            $detalle_log = "Exportación: " . count($pagos_ids) . " registros. Filtros: Area(" . ($area_sel ?: 'Todas') . ")";
+            $detalle_log = "Exportación Sincronizada: " . count($pagos_ids) . " registros. Filtros: Area(" . ($area_sel ?: 'Todas') . ")";
             registrarBitacora('NOMINA', 'CORTE GENERADO', $detalle_log, $conn);
         }
 
@@ -104,5 +104,5 @@ if ($resultado && $resultado->num_rows > 0) {
         echo "Error: " . $e->getMessage();
     }
 } else {
-    echo "No hay datos que coincidan con los filtros seleccionados.";
+    echo "No hay datos pendientes para esta quincena.";
 }

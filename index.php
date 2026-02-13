@@ -409,7 +409,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         </button>
                         <div x-show="userMenuOpen" x-transition class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
                             <a href="mis_pedidos.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-escala-green font-bold"><i data-lucide="package" class="inline w-4 h-4 mr-2"></i> Mis Pedidos</a>
-                        </div>
+                        </div>    
                     </div>
                 </div>
 
@@ -454,6 +454,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             <a href="api/logout_cupon.php" class="ml-1 text-white/50 hover:text-red-400 transition-colors bg-black/20 rounded-full p-1"><i data-lucide="x" class="w-3 h-3"></i></a>
                         </div>
                     </template>
+                    <div class="flex justify-end mb-6">
+    
+</div>
                     <template x-if="!coupon">
                         <div class="relative w-full md:w-48">
                             <input type="text" x-model="couponCodeInput" @keydown.enter="aplicarCupon()" placeholder="CÓDIGO PROMOCIONAL" 
@@ -592,6 +595,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <i data-lucide="package" class="w-16 h-16 mb-4 opacity-50"></i>
                 <p class="font-medium text-lg">No se encontraron productos.</p>
             </div>
+        </div>
+        <div class="relative w-50 h-10 mt-4"><a href="preguntas.php" class="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-escala-green hover:border-escala-green transition-all shadow-sm group"><i data-lucide="help-circle" class="w-4 h-4 text-gray-300 group-hover:text-escala-green transition-colors"></i>¿CÓMO FUNCIONA? - FAQ</a>
         </div>
     </main>
 

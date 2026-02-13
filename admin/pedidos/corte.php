@@ -9,8 +9,16 @@ $f_inicio = $_GET['f_inicio'] ?? '';
 $f_fin    = $_GET['f_fin'] ?? '';
 $area_sel = $_GET['area'] ?? '';
 
-// --- 2. CONSTRUCCIÓN DE QUERY DINÁMICA ---
-$where = "WHERE pn.estado = 'pendiente' AND p.estado = 'aprobado'";
+// --- 2. CONSTRUCCIÓN DE QUERY DINÁMICA CON PRIORIDAD ---
+// Añadimos la subquery: Solo mostrar el ID mínimo (cuota más vieja) de cada pedido que esté pendiente
+$where = "WHERE pn.estado = 'pendiente' 
+          AND p.estado = 'aprobado' 
+          AND pn.id IN (
+              SELECT MIN(id) 
+              FROM pagos_nomina 
+              WHERE estado = 'pendiente' 
+              GROUP BY pedido_id
+          )";
 
 if (!empty($f_inicio)) {
     $where .= " AND p.fecha_pedido >= '" . $conn->real_escape_string($f_inicio) . " 00:00:00'";
