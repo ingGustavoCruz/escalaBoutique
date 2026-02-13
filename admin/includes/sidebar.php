@@ -45,8 +45,13 @@
         </a>
 
         <a href="<?php echo $ruta_base; ?>admin/cupones/" 
-           class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all <?php echo strpos($_SERVER['PHP_SELF'], 'cupones') ? 'bg-white/10 text-white shadow-inner' : ''; ?>">
+        class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all <?php echo strpos($_SERVER['PHP_SELF'], 'cupones') ? 'bg-white/10 text-white shadow-inner' : ''; ?>">
             <i data-lucide="ticket" class="w-5 h-5"></i> <span class="font-medium text-sm">Cupones</span>
+        </a>
+
+        <a href="<?php echo $ruta_base; ?>admin/inventario/" 
+        class="flex items-center gap-3 px-4 py-3 text-escala-beige hover:text-white hover:bg-white/5 rounded-xl transition-all <?php echo strpos($_SERVER['PHP_SELF'], 'inventario') ? 'bg-white/10 text-white shadow-inner' : ''; ?>">
+            <i data-lucide="package-search" class="w-5 h-5"></i><span class="font-medium text-sm">Inventario</span>
         </a>
 
         <?php if(isset($_SESSION['admin_rol']) && $_SESSION['admin_rol'] === 'superadmin'): ?>
