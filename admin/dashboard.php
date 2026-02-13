@@ -139,7 +139,7 @@ $topCupones = $conn->query("
                     <h1 class="text-xl font-black text-escala-green uppercase tracking-wide">Resumen Ejecutivo</h1>
                     <p class="text-xs text-gray-400">Visión general del negocio</p>
                 </div>
-                
+                <a href="../admin/configuracion/index.php" class="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-escala-green hover:text-escala-green text-gray-500 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all shadow-sm">Ajustes del Sistema<i data-lucide="cog" class="w-3 h-3"></i></a>
                 <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
                     <form class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 w-full md:w-auto justify-center">
                         <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">

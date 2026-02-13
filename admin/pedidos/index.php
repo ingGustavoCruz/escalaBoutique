@@ -71,6 +71,7 @@ $resultado = $conn->query($query);
                 <div class="flex items-center gap-4">
                     <h1 class="text-2xl font-black text-escala-green uppercase tracking-tighter">Bandeja de Pedidos</h1>
                     <span class="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-bold"><?php echo $resultado->num_rows; ?> Total</span>
+                    <a href="corte.php" class="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-escala-green hover:text-escala-green text-gray-500 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all shadow-sm">Corte de Quincena<i data-lucide="chart-column-stacked" class="w-3 h-3"></i></a>
                 </div>
             </header>
 

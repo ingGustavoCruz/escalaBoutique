@@ -138,6 +138,22 @@ try {
          $conn->query("UPDATE pedidos SET monto_total = $total_calculado WHERE id = $pedido_id");
     }
 
+    // --- NUEVO: GENERACIÓN DE CUOTAS PARA NÓMINA (AMORTIZACIÓN) ---
+    $monto_cuota = round($total_calculado / $plazos, 2);
+    $suma_cuotas = $monto_cuota * $plazos;
+    $ajuste_centavos = round($total_calculado - $suma_cuotas, 2);
+
+    for ($i = 1; $i <= $plazos; $i++) {
+        // La última cuota absorbe cualquier diferencia por redondeo de centavos
+        $monto_final_cuota = ($i === $plazos) ? ($monto_cuota + $ajuste_centavos) : $monto_cuota;
+        
+        $stmtPagos = $conn->prepare("INSERT INTO pagos_nomina (pedido_id, empleado_id, numero_cuota, total_cuotas, monto_cuota) VALUES (?, ?, ?, ?, ?)");
+        $stmtPagos->bind_param("iiiid", $pedido_id, $empleado_id, $i, $plazos, $monto_final_cuota);
+        $stmtPagos->execute();
+        $stmtPagos->close();
+    }
+    // --- FIN BLOQUE NUEVO ---
+
     // --- 4. CONFIRMAR TRANSACCIÓN (COMMIT) ---
     $conn->commit();
 

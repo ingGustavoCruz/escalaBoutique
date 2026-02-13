@@ -1,67 +1,64 @@
-# 🛍️ Escala Boutique - Intranet E-commerce
+🛍️ Escala Boutique - Intranet E-commerce (V. 1.1)
+Sistema de gestión de pedidos internos para empleados mediante descuento por nómina con blindaje de seguridad y auditoría de inventario.
 
-Sistema de gestión de pedidos internos para empleados mediante descuento por nómina (Payroll Deduction).
+🚀 Características Avanzadas
+👮‍♂️ Backend Administrativo (BI & Operaciones)
+Corte de Nómina Masivo: Módulo para exportar layouts CSV listos para sistemas contables, evitando duplicidad de cargos mediante estados de envío.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![PHP](https://img.shields.io/badge/PHP-8.0+-777BB4)
-![MySQL](https://img.shields.io/badge/MySQL-Database-4479A1)
+Dashboard de Business Intelligence: Análisis de KPIs, tendencias de ventas de 6 meses y rendimiento de campañas de cupones en tiempo real.
 
-## 🚀 Características Principales
+Seguridad Corporativa: Protección global contra ataques CSRF en todos los formularios críticos y validación de tokens de sesión.
 
-### 🛒 Frontend (Empleados)
+Auditoría de Inventario: Bitácora automatizada que rastrea cada movimiento de stock (ventas, cancelaciones y ajustes manuales) con ID de responsable.
 
-- **Catálogo Visual:** Vista de productos con tallas y stock en tiempo real.
-- **Carrito de Compras:** Gestión de items antes de confirmar.
-- **Descuento por Nómina:** Cálculo automático de plazos quincenales.
-- **Mis Pedidos:** Historial de compras y estado de entrega.
+🛒 Frontend (Experiencia del Empleado)
+Transparencia Quincenal: Proyección visual de descuentos en Mis Pedidos para que el colaborador sepa exactamente cuánto se le descontará cada quincena según su plan.
 
-### 👮‍♂️ Backend (Administrador)
+Gestión Inteligente: Bloqueo de transacciones por stock insuficiente a nivel de talla mediante transacciones SQL.
 
-- **Dashboard BI:** Gráficas de ventas, KPIs, inventario crítico y exportación a Excel (CSV).
-- **Gestión de Pedidos:** Flujo de aprobación (Pendiente -> Entregado).
-- **Inventario:** CRUD de productos con gestión de **Tallas** y **Galería de Imágenes**.
-- **Marketing:** Módulo de Cupones con generador de imágenes para WhatsApp.
-- **Directorio:** Listado de empleados y análisis de consumo interno.
+🛠️ Stack Técnico Actualizado
+Seguridad: Motor de validación CSRF nativo.
 
-## 🛠️ Tecnologías Utilizadas
+Base de Datos: Triggers automáticos para sincronización de stock global y tablas de auditoría.
 
-- **Backend:** PHP Nativo (Sin frameworks pesados).
-- **Base de Datos:** MySQL / MariaDB.
-- **Frontend:** HTML5, Tailwind CSS (CDN).
-- **Interactividad:** Alpine.js (Manejo de estados y modales).
-- **Gráficos:** Chart.js.
-- **Reportes:** Librería `html2canvas` para cupones.
+Frontend: Tailwind CSS, Alpine.js, Lucide Icons y Chart.js.
 
-## ⚙️ Instalación
+⚙️ Configuración de Seguridad (Importante)
+El sistema requiere que el servidor soporte sesiones activas para la generación de tokens criptográficos:
 
-1. **Base de Datos:**
-   - Crear una base de datos llamada `escala_boutique`.
-   - Importar el archivo `database/schema.sql` (o la estructura proporcionada).
+Asegurar que api/conexion.php esté incluido en todos los procesos que usen POST.
 
-2. **Conexión:**
-   - Configurar credenciales en `api/conexion.php`.
+Verificar que la tabla bitacora_inventario exista para evitar errores en el flujo de pedidos.
 
-3. **Permisos:**
-   - Asegurar que la carpeta `imagenes/` tenga permisos de escritura.
+📋 Guía de Operación para Recursos Humanos y Nómina
+Este sistema está diseñado para automatizar el ciclo de cobro y asegurar la integridad del inventario.
 
-## 🔑 Credenciales por Defecto (Entorno Local)
+1. Gestión del Ciclo de Nómina (Corte Quincenal)
+   Para evitar la saturación de correos y errores manuales, el proceso de cobro se centraliza en el módulo de Corte de Quincena:
 
-**Administrador:**
+Revisión: El sistema filtra automáticamente todos los pedidos con estado "Aprobado (RH)" que aún no han sido descontados.
 
-- URL: `/admin/`
-- Usuario: (Configurado en base de datos, tabla `admins`)
+Exportación Masiva: Al hacer clic en "Descargar Layout", se genera un archivo CSV compatible con Excel que contiene el número de empleado y el monto exacto a descontar según el plazo elegido (1, 2 o 3 quincenas).
 
-**Empleado de Prueba:**
+Cierre de Corte: Una vez descargado el archivo, el sistema marca estos pedidos como "Enviados a Nómina" para que no se vuelvan a cobrar en la siguiente quincena.
 
-- Auto-login configurado para desarrollo local (`$_SESSION['empleado_id'] = 1`).
+2. Flujo de Pedidos e Inventario
+   La administración de la boutique debe seguir este flujo para mantener el stock auditado:
 
-## 📂 Estructura del Proyecto
+Aprobación: Un pedido entra como "Pendiente" y debe ser validado por RH.
 
-- `/admin` - Panel de control protegido.
-- `/api` - Lógica de conexión y endpoints.
-- `/imagenes` - Carga de fotos de productos.
-- `index.php` - Tienda principal.
+Cancelaciones: Si un pedido se cancela, el sistema devuelve automáticamente las prendas al stock (por talla o global) y genera un registro en la Bitácora de Inventario.
 
----
+Auditoría: Cualquier movimiento de mercancía queda registrado con la fecha, el motivo y el ID del administrador responsable, permitiendo rastrear discrepancias en el almacén.
 
-Desarrollado para uso interno de Escala.
+3. Estrategia de Marketing Interno
+   El módulo de Cupones permite incentivar el consumo de los colaboradores:
+
+Generación de Imagen: Una vez creado un cupón, se puede generar una tarjeta visual personalizada para compartir por WhatsApp o canales internos.
+
+Monitoreo: El Dashboard BI muestra en tiempo real qué cupones están teniendo mayor éxito, permitiendo medir el retorno de las campañas de beneficios.
+
+🛡️ Notas de Seguridad para el Administrador
+Acceso Seguro: El panel administrativo está protegido contra ataques de sesión y falsificación de peticiones (CSRF).
+
+Bitácora de Seguridad: Cada inicio de sesión y modificación sensible (cambio de precios o eliminación de usuarios) queda grabado de forma permanente para fines de auditoría.
