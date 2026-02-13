@@ -1,64 +1,42 @@
-🛍️ Escala Boutique - Intranet E-commerce (V. 1.1)
-Sistema de gestión de pedidos internos para empleados mediante descuento por nómina con blindaje de seguridad y auditoría de inventario.
+🛍️ Escala Boutique - Intranet E-commerce (V. 1.2)
+Sistema de gestión de pedidos internos para empleados mediante descuento por nómina con Inteligencia de Negocio (BI), blindaje de seguridad de grado bancario y optimización de activos.
 
-🚀 Características Avanzadas
+🚀 Características Avanzadas (Nuevas en V. 1.2)
 👮‍♂️ Backend Administrativo (BI & Operaciones)
-Corte de Nómina Masivo: Módulo para exportar layouts CSV listos para sistemas contables, evitando duplicidad de cargos mediante estados de envío.
+Inteligencia Financiera (Prueba del Centavo): Dashboard de BI que diferencia entre Ingresos Recaudados (efectivo real en nómina) y Cuentas por Cobrar (proyección de cuotas pendientes), eliminando "dinero fantasma" en los reportes.
 
-Dashboard de Business Intelligence: Análisis de KPIs, tendencias de ventas de 6 meses y rendimiento de campañas de cupones en tiempo real.
+Auditoría Anti-Fraude de Precios: Registro automático en bitácora ante cualquier modificación de precios, identificando al administrador responsable y el monto exacto del cambio para prevenir manipulaciones internas.
 
-Seguridad Corporativa: Protección global contra ataques CSRF en todos los formularios críticos y validación de tokens de sesión.
+Corte de Nómina Masivo: Exportación de layouts CSV con rigor contable que incluye desglose de montos recaudados vs. saldos pendientes por pedido.
 
-Auditoría de Inventario: Bitácora automatizada que rastrea cada movimiento de stock (ventas, cancelaciones y ajustes manuales) con ID de responsable.
+Optimización de Assets (WebP): Rutina automática que convierte imágenes pesadas (JPG/PNG) al formato WebP al subir o editar productos, reduciendo el peso de la galería hasta un 70% sin perder calidad visual.
+
+🛡️ Seguridad Corporativa de "Doble Cerrojo"
+Session Timeout & Inactivity Lock: El sistema expulsa automáticamente a los administradores tras 20 minutos de inactividad, protegiendo la sesión en computadoras desatendidas mediante validación en servidor y monitor en cliente.
+
+Escudo Global CSRF: Protección criptográfica en todos los formularios críticos para evitar ejecuciones maliciosas externas.
 
 🛒 Frontend (Experiencia del Empleado)
-Transparencia Quincenal: Proyección visual de descuentos en Mis Pedidos para que el colaborador sepa exactamente cuánto se le descontará cada quincena según su plan.
+Performance Ultra-Rápido: Implementación de Lazy Loading en todo el catálogo y el historial de pedidos; las imágenes solo se descargan cuando el usuario hace scroll hacia ellas.
 
-Gestión Inteligente: Bloqueo de transacciones por stock insuficiente a nivel de talla mediante transacciones SQL.
+Interfaz Premium Unificada: Diseño consistente basado en tipografía Inter, pesos visuales fuertes (font-black) y radios de borde redondeados (2.5rem) para una experiencia de marca de alta gama.
 
 🛠️ Stack Técnico Actualizado
-Seguridad: Motor de validación CSRF nativo.
+Rendimiento: Conversión dinámica WebP (PHP GD) y Carga Perezosa (Native Lazy Loading).
 
-Base de Datos: Triggers automáticos para sincronización de stock global y tablas de auditoría.
+BI: Chart.js con lógica de flujo de caja real y exportador CSV con auditoría financiera.
 
-Frontend: Tailwind CSS, Alpine.js, Lucide Icons y Chart.js.
+Frontend: Tailwind CSS, Alpine.js, Lucide Icons e Inter Font.
 
 ⚙️ Configuración de Seguridad (Importante)
-El sistema requiere que el servidor soporte sesiones activas para la generación de tokens criptográficos:
+Gestión de Sesiones: El monitor de inactividad requiere que sidebar.php esté incluido en todas las vistas administrativas.
 
-Asegurar que api/conexion.php esté incluido en todos los procesos que usen POST.
+Integridad de Auditoría: Se debe verificar que la función registrarBitacora() en api/logger.php tenga permisos de escritura para capturar los cambios de precio y movimientos de stock.
 
-Verificar que la tabla bitacora_inventario exista para evitar errores en el flujo de pedidos.
+📋 Guía de Operación Estratégica
 
-📋 Guía de Operación para Recursos Humanos y Nómina
-Este sistema está diseñado para automatizar el ciclo de cobro y asegurar la integridad del inventario.
+1. Gestión Financiera (Dashboard)
+   El nuevo Resumen Ejecutivo permite a la dirección tomar decisiones basadas en Recaudación Real. Al visualizar el monto "Por recaudar", la boutique puede proyectar sus compras de stock futuro basándose en la deuda actual de los colaboradores.
 
-1. Gestión del Ciclo de Nómina (Corte Quincenal)
-   Para evitar la saturación de correos y errores manuales, el proceso de cobro se centraliza en el módulo de Corte de Quincena:
-
-Revisión: El sistema filtra automáticamente todos los pedidos con estado "Aprobado (RH)" que aún no han sido descontados.
-
-Exportación Masiva: Al hacer clic en "Descargar Layout", se genera un archivo CSV compatible con Excel que contiene el número de empleado y el monto exacto a descontar según el plazo elegido (1, 2 o 3 quincenas).
-
-Cierre de Corte: Una vez descargado el archivo, el sistema marca estos pedidos como "Enviados a Nómina" para que no se vuelvan a cobrar en la siguiente quincena.
-
-2. Flujo de Pedidos e Inventario
-   La administración de la boutique debe seguir este flujo para mantener el stock auditado:
-
-Aprobación: Un pedido entra como "Pendiente" y debe ser validado por RH.
-
-Cancelaciones: Si un pedido se cancela, el sistema devuelve automáticamente las prendas al stock (por talla o global) y genera un registro en la Bitácora de Inventario.
-
-Auditoría: Cualquier movimiento de mercancía queda registrado con la fecha, el motivo y el ID del administrador responsable, permitiendo rastrear discrepancias en el almacén.
-
-3. Estrategia de Marketing Interno
-   El módulo de Cupones permite incentivar el consumo de los colaboradores:
-
-Generación de Imagen: Una vez creado un cupón, se puede generar una tarjeta visual personalizada para compartir por WhatsApp o canales internos.
-
-Monitoreo: El Dashboard BI muestra en tiempo real qué cupones están teniendo mayor éxito, permitiendo medir el retorno de las campañas de beneficios.
-
-🛡️ Notas de Seguridad para el Administrador
-Acceso Seguro: El panel administrativo está protegido contra ataques de sesión y falsificación de peticiones (CSRF).
-
-Bitácora de Seguridad: Cada inicio de sesión y modificación sensible (cambio de precios o eliminación de usuarios) queda grabado de forma permanente para fines de auditoría.
+2. Control de Inventario y Precios
+   Cualquier discrepancia en el almacén o manipulación de precios queda grabada con fecha y responsable en la Bitácora de Seguridad, garantizando una rendición de cuentas total ante auditorías externas.
