@@ -1,6 +1,6 @@
 <?php
 /**
- * admin/dashboard.php - Dashboard Pro Protegido con CSRF
+ * admin/dashboard.php - Dashboard Pro con Reportes, Gráficos y Rendimiento de Cupones
  */
 session_start();
 require_once '../api/conexion.php';
@@ -11,7 +11,7 @@ $ruta_base = "../";
 // Seguridad
 if (!isset($_SESSION['admin_id'])) { header("Location: index.php"); exit; }
 
-// CIRUGÍA: Validar escudo CSRF (Solo se activará si detecta un envío POST)
+// CIRUGÍA: Validar escudo CSRF
 validar_csrf(); 
 
 // --- 1. LÓGICA DE EXPORTACIÓN A EXCEL (CSV) ---
@@ -20,12 +20,10 @@ if (isset($_GET['export']) && $_GET['export'] == 'true') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     $output = fopen('php://output', 'w');
-    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM para que Excel lea acentos
+    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); 
     
-    // Encabezados
     fputcsv($output, ['ID Pedido', 'Fecha', 'Empleado', 'Area', 'Total', 'Estado']);
     
-    // Datos
     $res = $conn->query("SELECT p.id, p.fecha_pedido, e.nombre, e.area, p.monto_total, p.estado FROM pedidos p JOIN empleados e ON p.empleado_id = e.id ORDER BY p.fecha_pedido DESC");
     while($row = $res->fetch_assoc()) {
         fputcsv($output, $row);
@@ -34,7 +32,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'true') {
     exit;
 }
 
-// --- 2. FILTROS DE FECHA (Por defecto: Mes Actual) ---
+// --- 2. FILTROS DE FECHA ---
 $fecha_inicio = isset($_GET['desde']) ? $_GET['desde'] : date('Y-m-01');
 $fecha_fin = isset($_GET['hasta']) ? $_GET['hasta'] : date('Y-m-t');
 
@@ -89,6 +87,14 @@ $topEmpleados = $conn->query("
     GROUP BY e.id ORDER BY total DESC LIMIT 5
 ");
 
+// CIRUGÍA: Consulta de Rendimiento de Cupones
+$topCupones = $conn->query("
+    SELECT codigo, usos_actuales 
+    FROM cupones 
+    WHERE usos_actuales > 0 
+    ORDER BY usos_actuales DESC LIMIT 3
+");
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -137,7 +143,6 @@ $topEmpleados = $conn->query("
                 <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
                     <form class="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 w-full md:w-auto justify-center">
                         <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-
                         <span class="text-[10px] font-bold text-gray-400 uppercase ml-2 hidden md:inline">Periodo:</span>
                         <input type="date" name="desde" value="<?php echo $fecha_inicio; ?>" class="bg-white border border-gray-200 text-xs rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-escala-green">
                         <span class="text-gray-300">-</span>
@@ -171,23 +176,18 @@ $topEmpleados = $conn->query("
                         <div class="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
                         <p class="text-escala-beige text-xs font-bold uppercase tracking-widest mb-1">Ingresos (Periodo)</p>
                         <h2 class="text-4xl font-black">$<?php echo number_format($ventasPeriodo, 2); ?></h2>
-                        <div class="mt-4 flex items-center gap-2 text-[10px] bg-black/20 w-fit px-2 py-1 rounded">
-                            <i data-lucide="trending-up" class="w-3 h-3"></i> Ventas Netas
-                        </div>
                     </div>
                     
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
                         <div class="absolute right-4 top-4 bg-purple-50 p-3 rounded-xl text-purple-600 group-hover:rotate-12 transition-transform"><i data-lucide="shopping-bag" class="w-6 h-6"></i></div>
                         <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Pedidos (Periodo)</p>
                         <h2 class="text-4xl font-black text-gray-800"><?php echo $pedidosPeriodo; ?></h2>
-                        <p class="text-xs text-gray-400 mt-2 font-medium">Órdenes procesadas</p>
                     </div>
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
                         <div class="absolute right-4 top-4 bg-green-50 p-3 rounded-xl text-green-600 group-hover:rotate-12 transition-transform"><i data-lucide="users" class="w-6 h-6"></i></div>
                         <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Usuarios Activos</p>
                         <h2 class="text-4xl font-black text-gray-800"><?php echo $nuevosPeriodo; ?></h2>
-                        <p class="text-xs text-gray-400 mt-2 font-medium">Accesos en el periodo</p>
                     </div>
                 </div>
 
@@ -242,28 +242,44 @@ $topEmpleados = $conn->query("
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                        <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
-                            <i data-lucide="crown" class="w-4 h-4 text-purple-500"></i> Empleados VIP
-                        </h3>
-                        <div class="space-y-4">
-                            <?php while($row = $topEmpleados->fetch_assoc()): ?>
-                            <div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 bg-escala-green/10 text-escala-green rounded-full flex items-center justify-center font-bold text-xs">
-                                        <?php echo substr($row['nombre'],0,1); ?>
+                    <div class="space-y-6">
+                        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                            <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
+                                <i data-lucide="crown" class="w-4 h-4 text-purple-500"></i> Empleados VIP
+                            </h3>
+                            <div class="space-y-4">
+                                <?php while($row = $topEmpleados->fetch_assoc()): ?>
+                                <div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 bg-escala-green/10 text-escala-green rounded-full flex items-center justify-center font-bold text-xs"><?php echo substr($row['nombre'],0,1); ?></div>
+                                        <div>
+                                            <p class="text-xs font-bold text-gray-800 line-clamp-1"><?php echo $row['nombre']; ?></p>
+                                            <p class="text-[9px] text-gray-400 uppercase"><?php echo $row['area']; ?></p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p class="text-xs font-bold text-gray-800 line-clamp-1"><?php echo $row['nombre']; ?></p>
-                                        <p class="text-[9px] text-gray-400 uppercase"><?php echo $row['area']; ?></p>
+                                    <div class="text-right">
+                                        <p class="text-xs font-black text-escala-dark">$<?php echo number_format($row['total']); ?></p>
                                     </div>
                                 </div>
-                                <div class="text-right">
-                                    <p class="text-xs font-black text-escala-dark">$<?php echo number_format($row['total']); ?></p>
-                                    <p class="text-[9px] text-gray-400"><?php echo $row['ordenes']; ?> ord.</p>
-                                </div>
+                                <?php endwhile; ?>
                             </div>
-                            <?php endwhile; ?>
+                        </div>
+
+                        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                            <h3 class="font-bold text-gray-700 text-sm mb-4 flex items-center gap-2">
+                                <i data-lucide="ticket" class="w-4 h-4 text-escala-beige"></i> Cupones más usados
+                            </h3>
+                            <div class="space-y-4">
+                                <?php while($c = $topCupones->fetch_assoc()): ?>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-black text-escala-green bg-escala-green/5 px-2 py-1 rounded uppercase tracking-wider"><?php echo $c['codigo']; ?></span>
+                                    <span class="text-xs font-bold text-gray-600"><?php echo $c['usos_actuales']; ?> usos</span>
+                                </div>
+                                <?php endwhile; ?>
+                                <?php if($topCupones->num_rows === 0): ?>
+                                    <p class="text-[10px] text-gray-400 italic text-center">Sin actividad en cupones.</p>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -274,8 +290,6 @@ $topEmpleados = $conn->query("
 
     <script>
         lucide.createIcons();
-        
-        // --- CONFIGURACIÓN DE GRÁFICAS ---
         const ctxSales = document.getElementById('salesChart').getContext('2d');
         new Chart(ctxSales, {
             type: 'line',
