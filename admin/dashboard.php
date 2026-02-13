@@ -11,19 +11,45 @@ if (!isset($_SESSION['admin_id'])) { header("Location: index.php"); exit; }
 
 validar_csrf(); 
 
-// --- 1. LÓGICA DE EXPORTACIÓN A EXCEL (CSV) ---
+// --- 1. LÓGICA DE EXPORTACIÓN A EXCEL (CSV) ACTUALIZADA ---
 if (isset($_GET['export']) && $_GET['export'] == 'true') {
-    $filename = "Reporte_General_Escala_" . date('Y-m-d') . ".csv";
+    $filename = "Reporte_Financiero_Escala_" . date('Y-m-d') . ".csv";
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     $output = fopen('php://output', 'w');
     fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); 
     
-    fputcsv($output, ['ID Pedido', 'Fecha', 'Empleado', 'Area', 'Total', 'Estado']);
+    // Columnas con rigor financiero
+    fputcsv($output, ['ID Pedido', 'Fecha', 'Empleado', 'Area', 'Total Pedido', 'Recaudado (Efectivo)', 'Pendiente (Cobro)', 'Estado']);
     
-    $res = $conn->query("SELECT p.id, p.fecha_pedido, e.nombre, e.area, p.monto_total, p.estado FROM pedidos p JOIN empleados e ON p.empleado_id = e.id ORDER BY p.fecha_pedido DESC");
+    // Consulta que calcula montos reales por pedido
+    $queryFull = "
+        SELECT 
+            p.id, 
+            p.fecha_pedido, 
+            e.nombre, 
+            e.area, 
+            p.monto_total,
+            (SELECT COALESCE(SUM(monto_cuota), 0) FROM pagos_nomina WHERE pedido_id = p.id AND estado = 'enviado') as recaudado,
+            (SELECT COALESCE(SUM(monto_cuota), 0) FROM pagos_nomina WHERE pedido_id = p.id AND estado = 'pendiente') as pendiente,
+            p.estado 
+        FROM pedidos p 
+        JOIN empleados e ON p.empleado_id = e.id 
+        ORDER BY p.fecha_pedido DESC
+    ";
+    
+    $res = $conn->query($queryFull);
     while($row = $res->fetch_assoc()) {
-        fputcsv($output, $row);
+        fputcsv($output, [
+            $row['id'],
+            $row['fecha_pedido'],
+            $row['nombre'],
+            $row['area'],
+            $row['monto_total'],
+            $row['recaudado'],
+            $row['pendiente'],
+            $row['estado']
+        ]);
     }
     fclose($output);
     exit;
