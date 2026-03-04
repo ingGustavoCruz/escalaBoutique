@@ -1,6 +1,6 @@
 <?php
 /**
- * mis_pedidos.php - Historial de Compras con Desglose Quincenal y Empresas (Incorporadas)
+ * mis_pedidos.php - Historial de Compras con Desglose Quincenal, Empresas y Envíos
  * Versión: Frontend Optimizado (Lazy Loading)
  */
 require_once 'api/conexion.php';
@@ -16,13 +16,18 @@ $empleado_id = $_SESSION['empleado_id_db'];
 $empleado_nombre = $_SESSION['usuario_empleado']['nombre'] ?? "Colaborador";
 $empleado_num = $_SESSION['usuario_empleado']['numero'] ?? "S/N";
 
-// --- 2. OBTENER PEDIDOS (Estructura Optimizada) ---
+// --- 2. OBTENER PEDIDOS (Estructura Optimizada + Envíos) ---
 $pedidos = [];
+// MODIFICADO: Agregamos requiere_envio y hacemos JOIN con direcciones_envio
 $stmt = $conn->prepare("
-    SELECT id, fecha_pedido, monto_total, estado, plazos 
-    FROM pedidos 
-    WHERE empleado_id = ? 
-    ORDER BY fecha_pedido DESC
+    SELECT 
+        p.id, p.fecha_pedido, p.monto_total, p.estado, p.plazos, p.requiere_envio,
+        d.estado as env_estado, d.calle as env_calle, d.colonia as env_colonia, 
+        d.cp as env_cp, d.nombre_contacto as env_nombre, d.telefono_contacto as env_telefono
+    FROM pedidos p
+    LEFT JOIN direcciones_envio d ON p.id = d.pedido_id
+    WHERE p.empleado_id = ? 
+    ORDER BY p.fecha_pedido DESC
 ");
 $stmt->bind_param("i", $empleado_id);
 $stmt->execute();
@@ -31,7 +36,7 @@ $res = $stmt->get_result();
 while($row = $res->fetch_assoc()) {
     $pid = $row['id'];
     
-    // Consulta de detalles para cada pedido (MODIFICADA PARA INCLUIR INCORPORADAS)
+    // Consulta de detalles para cada pedido
     $stmtDet = $conn->prepare("
         SELECT 
             dp.cantidad, 
@@ -196,6 +201,35 @@ $stmt->close();
                                     <div class="flex justify-between items-end text-[11px] font-black uppercase tracking-widest">
                                         <span class="text-slate-400">Plan: <span class="text-slate-700"><?php echo $p['plazos']; ?> quincena(s)</span></span>
                                         <span class="text-escala-green text-sm">$<?php echo number_format($p['monto_total'] / $p['plazos'], 2); ?> por quincena</span>
+                                    </div>
+                                </div>
+
+                                <div class="mb-8">
+                                    <h4 class="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-3 ml-2">
+                                        <i data-lucide="truck" class="w-4 h-4 text-escala-beige"></i> Información de Entrega
+                                    </h4>
+                                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+                                        <?php if($p['requiere_envio']): ?>
+                                            <div class="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center shrink-0">
+                                                <i data-lucide="map-pin" class="w-5 h-5"></i>
+                                            </div>
+                                            <div>
+                                                <p class="text-xs font-black text-slate-700 uppercase tracking-widest mb-1">Envío a Provincia</p>
+                                                <p class="text-[11px] font-medium text-slate-500 leading-relaxed">
+                                                    <strong class="text-slate-700">Recibe:</strong> <?php echo htmlspecialchars($p['env_nombre']); ?> (<?php echo htmlspecialchars($p['env_telefono']); ?>)<br>
+                                                    <strong class="text-slate-700">Dirección:</strong> <?php echo htmlspecialchars($p['env_calle']); ?>, Col. <?php echo htmlspecialchars($p['env_colonia']); ?><br>
+                                                    C.P. <?php echo htmlspecialchars($p['env_cp']); ?>, <?php echo htmlspecialchars($p['env_estado']); ?>
+                                                </p>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="w-10 h-10 bg-escala-green/10 text-escala-green rounded-xl flex items-center justify-center shrink-0">
+                                                <i data-lucide="building-2" class="w-5 h-5"></i>
+                                            </div>
+                                            <div class="flex flex-col justify-center">
+                                                <p class="text-xs font-black text-slate-700 uppercase tracking-widest mb-1">Recolección en Persona</p>
+                                                <p class="text-[11px] font-medium text-slate-500">Recoger en Oficina CDMX.</p>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 
