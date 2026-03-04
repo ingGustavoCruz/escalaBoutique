@@ -78,7 +78,9 @@ $productos = $conn->query($query);
                 <h1 class="text-xl font-black text-escala-green uppercase tracking-wide w-full md:w-auto text-center md:text-left">
                     Inventario General
                 </h1>
-                
+                <a href="exportar_excel.php" class="bg-escala-green hover:bg-escala-dark text-white px-5 py-2.5 rounded-lg text-sm font-bold uppercase shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 w-full md:w-auto justify-center">
+                    <i data-lucide="download" class="w-4 h-4"></i> Descargar Inventario
+                </a>
                 <a href="crear.php" class="bg-escala-green hover:bg-escala-dark text-white px-5 py-2.5 rounded-lg text-sm font-bold uppercase shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 w-full md:w-auto justify-center">
                     <i data-lucide="plus" class="w-4 h-4"></i> Nuevo Producto
                 </a>

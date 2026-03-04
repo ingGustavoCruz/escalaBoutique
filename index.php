@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción Final (Optimizado y Verificado con Lazy Loading)
+ * Versión: Producción Final (Optimizado y Verificado con Lazy Loading + Incorporadas)
  */
 session_start();
 error_reporting(E_ALL);
@@ -85,6 +85,7 @@ if ($resultado && $resultado->num_rows > 0) {
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
         $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
+        $row['sel_inc'] = (int)$row['sel_inc']; // <-- CASTEO PARA INCORPORADAS
         
         // Categorías
         $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
@@ -95,6 +96,16 @@ if ($resultado && $resultado->num_rows > 0) {
             $categorias[] = $catClean;
         }
         $productos[] = $row;
+    }
+}
+
+// --- 3. CARGA DE INCORPORADAS ---
+$queryInc = "SELECT id, nombre, url_img FROM incorporadas WHERE activo = 1";
+$resInc = $conn->query($queryInc);
+$incorporadas = [];
+if ($resInc && $resInc->num_rows > 0) {
+    while($rowInc = $resInc->fetch_assoc()) {
+        $incorporadas[] = $rowInc;
     }
 }
 
@@ -128,6 +139,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         function appData() {
             return {
                 products: <?php echo json_encode($productos, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
+                incorporadas: <?php echo json_encode($incorporadas, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG); ?>,
                 coupon: <?php echo json_encode($cupon_activo); ?>,
                 couponCodeInput: '',
                 isLoading: true,
@@ -212,19 +224,26 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 openModal(p) { 
                     this.selectedProduct = JSON.parse(JSON.stringify(p)); 
                     this.selectedProduct.sizeSelected = ''; 
+                    this.selectedProduct.incSelected = ''; // Limpiamos selección de empresa
                     this.activeImgModal = 0; 
                 },
 
-                addToCart(p, qty = 1, size = null) {
+                addToCart(p, qty = 1, size = null, incId = null) {
                     if (p.stock === 0) return;
                     
                     if (p.variantes && p.variantes.length > 0 && !size) {
                         alert('Por favor selecciona una talla.');
                         return;
                     }
+
+                    if (p.sel_inc === 1 && !incId) {
+                        alert('Por favor selecciona una empresa.');
+                        return;
+                    }
                     
                     const qtyNum = parseInt(qty);
-                    const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size);
+                    // Comprobamos si ya existe el mismo producto con la misma talla y el mismo logo
+                    const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size && i.incorporada_id === incId);
                     const finalPrice = this.getPrice(p);
 
                     if (itemIndex > -1) {
@@ -249,7 +268,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             img: imgUrl,
                             qty: qtyNum,
                             stock: stockReal,
-                            talla: size
+                            talla: size,
+                            incorporada_id: incId // Guardamos el ID de la incorporada seleccionada
                         });
                     }
                     this.saveCart();
@@ -274,6 +294,12 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                 totalPrice() { 
                     return this.cart.reduce((s, i) => s + (i.precio * i.qty), 0).toFixed(2); 
+                },
+                
+                getIncName(id) {
+                    if (!id) return '';
+                    let inc = this.incorporadas.find(i => i.id == id);
+                    return inc ? inc.nombre : '';
                 },
 
                 iniciarTramite() { this.cartOpen = false; this.showPayrollModal = true; },
@@ -571,7 +597,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             </div>
 
                             <div class="flex flex-col gap-3 w-full">
-                                <button @click="if(p.stock > 0) { (!p.variantes || p.variantes.length === 0) ? addToCart(p, qty) : openModal(p) }" 
+                                <button @click="if(p.stock > 0) { ((!p.variantes || p.variantes.length === 0) && p.sel_inc !== 1) ? addToCart(p, qty) : openModal(p) }" 
                                         class="w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all"
                                         :class="p.stock === 0 ? 'bg-gray-400 cursor-not-allowed text-white shadow-none' : 'btn-add'"
                                         :disabled="p.stock === 0">
@@ -579,7 +605,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                     <i x-show="p.stock > 0" data-lucide="shopping-cart" class="w-5 h-5"></i>
                                     <i x-show="p.stock === 0" data-lucide="x-circle" class="w-5 h-5"></i>
                                     
-                                    <span x-text="p.stock === 0 ? 'AGOTADO' : (p.variantes && p.variantes.length > 0 ? 'SELECCIONAR TALLA' : 'AÑADIR AL CARRITO')"></span>
+                                    <span x-text="p.stock === 0 ? 'AGOTADO' : ( (p.variantes && p.variantes.length > 0) || p.sel_inc === 1 ? 'CONFIGURAR OPCIONES' : 'AÑADIR AL CARRITO')"></span>
                                 </button>
                                 
                                 <button @click="openModal(p)" class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
@@ -596,7 +622,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <p class="font-medium text-lg">No se encontraron productos.</p>
             </div>
         </div>
-        <div class="relative w-50 h-10 mt-4"><a href="preguntas.php" class="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-escala-green hover:border-escala-green transition-all shadow-sm group"><i data-lucide="help-circle" class="w-4 h-4 text-gray-300 group-hover:text-escala-green transition-colors"></i>¿CÓMO FUNCIONA? - FAQ</a>
+        <div class="relative w-50 h-10 mt-4"><a href="preguntas.php" class="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-escala-green hover:border-escala-green transition-all shadow-sm group"><i data-lucide="help-circle" class="w-4 h-4 text-gray-300 group-hover:text-escala-green transition-colors"></i>¿CÓMO FUNCIONA ESCALA BOUTIQUE? - FAQ</a>
         </div>
     </main>
 
@@ -633,10 +659,15 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
-                        <template x-if="item.talla">
-                             <span class="text-[9px] font-bold text-gray-500 bg-gray-100 px-1 rounded" x-text="'Talla: ' + item.talla"></span>
-                        </template>
-                        <p class="text-escala-green font-black text-xs" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
+                        <div class="flex items-center flex-wrap gap-1">
+                            <template x-if="item.talla">
+                                 <span class="text-[9px] font-bold text-gray-500 bg-gray-100 px-1 rounded" x-text="'Talla: ' + item.talla"></span>
+                            </template>
+                            <template x-if="item.incorporada_id">
+                                 <span class="text-[9px] font-bold text-escala-blue bg-blue-50 px-1 rounded truncate max-w-[80px]" x-text="getIncName(item.incorporada_id)"></span>
+                            </template>
+                        </div>
+                        <p class="text-escala-green font-black text-xs mt-1" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
                     </div>
                     <div class="flex items-center bg-gray-50 rounded-md px-1 py-0.5 border border-gray-100">
                         <button @click="updateQty(index, -1)" class="p-1 text-gray-400 hover:text-red-500 transition-colors"><i data-lucide="minus" class="w-3 h-3"></i></button>
@@ -737,6 +768,24 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <p x-show="!selectedProduct.sizeSelected" class="text-[10px] text-red-500 font-bold mt-1">* Requerido</p>
                             </div>
                         </template>
+
+                        <template x-if="selectedProduct.sel_inc === 1">
+                            <div class="mt-4 mb-4">
+                                <p class="text-xs font-bold text-slate-800 uppercase mb-2">Selecciona Empresa:</p>
+                                <div class="grid grid-cols-3 gap-3">
+                                    <template x-for="inc in incorporadas" :key="inc.id">
+                                        <button @click="selectedProduct.incSelected = inc.id"
+                                                class="border-2 rounded-xl p-3 flex items-center justify-center transition-all bg-white hover:border-escala-green h-16 w-full group relative overflow-hidden"
+                                                :class="selectedProduct.incSelected === inc.id ? 'border-escala-green shadow-md ring-2 ring-escala-green/20' : 'border-gray-200'">
+                                            <img :src="inc.url_img" :alt="inc.nombre" class="max-h-full max-w-full object-contain filter group-hover:grayscale-0 transition-all"
+                                                 :class="selectedProduct.incSelected === inc.id ? 'grayscale-0 scale-105' : 'grayscale opacity-70'">
+                                        </button>
+                                    </template>
+                                </div>
+                                <p x-show="!selectedProduct.incSelected" class="text-[10px] text-red-500 font-bold mt-1">* Requerido</p>
+                            </div>
+                        </template>
+
                     </div>
                     
                     <p class="text-gray-600 text-base mb-8 leading-relaxed font-medium" x-text="selectedProduct.descripcion_larga || selectedProduct.descripcion_corta"></p>
@@ -746,7 +795,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             <div class="flex items-center bg-gray-100 rounded-full px-4 py-2 border border-gray-200" :class="{'opacity-50 pointer-events-none': selectedProduct.stock === 0}">
                                 <button @click="if(modalQty > 1) modalQty--" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">−</button>
                                 <span class="mx-4 font-black text-xl text-slate-800 w-6 text-center" x-text="modalQty"></span>
-                                <button @click="let max = selectedProduct.sizeSelected ? selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected).stock : selectedProduct.stock; if(modalQty < max) modalQty++; else alert('Stock máximo alcanzado para esta talla');" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
+                                <button @click="let max = selectedProduct.sizeSelected ? selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected).stock : selectedProduct.stock; if(modalQty < max) modalQty++; else alert('Stock máximo alcanzado para esta configuración');" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
                                 <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" 
@@ -763,10 +812,10 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             </div>
                         </div>
 
-                        <button @click="addToCart(selectedProduct, modalQty, selectedProduct.sizeSelected)" 
+                        <button @click="addToCart(selectedProduct, modalQty, selectedProduct.sizeSelected, selectedProduct.incSelected)" 
                                 class="w-full py-5 rounded-2xl font-black text-white uppercase shadow-xl hover:shadow-2xl transition-all flex justify-center gap-3 text-base tracking-wider"
-                                :class="(selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected)) ? 'bg-gray-400 cursor-not-allowed' : 'btn-add'"
-                                :disabled="selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected)">
+                                :class="(selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected) || (selectedProduct.sel_inc === 1 && !selectedProduct.incSelected)) ? 'bg-gray-400 cursor-not-allowed' : 'btn-add'"
+                                :disabled="selectedProduct.stock === 0 || (selectedProduct.variantes && selectedProduct.variantes.length > 0 && !selectedProduct.sizeSelected) || (selectedProduct.sel_inc === 1 && !selectedProduct.incSelected)">
                             <i x-show="selectedProduct.stock > 0" data-lucide="shopping-cart" class="w-6 h-6"></i> 
                             <i x-show="selectedProduct.stock === 0" data-lucide="x-circle" class="w-6 h-6"></i> 
                             <span x-text="selectedProduct.stock === 0 ? 'AGOTADO' : 'AGREGAR AL CARRITO'"></span>

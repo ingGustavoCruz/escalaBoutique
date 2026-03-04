@@ -1,7 +1,7 @@
 <?php
 /**
  * api/procesar_pedido_nomina.php
- * Versión Final: Transacción BD + Notificación a RH + Confirmación al Empleado + Auditoría de Inventario
+ * Versión Final: Transacción BD + Notificación a RH + Confirmación al Empleado + Auditoría de Inventario + Incorporadas
  */
 
 session_start();
@@ -58,9 +58,10 @@ try {
 
     // B. Procesar Productos
     foreach ($carrito as $item) {
-        $producto_id = (int)$item['id'];
-        $cantidad    = (int)$item['qty'];
-        $talla       = isset($item['talla']) ? $conn->real_escape_string($item['talla']) : null;
+        $producto_id    = (int)$item['id'];
+        $cantidad       = (int)$item['qty'];
+        $talla          = isset($item['talla']) && $item['talla'] !== '' ? $conn->real_escape_string($item['talla']) : null;
+        $incorporada_id = isset($item['incorporada_id']) && $item['incorporada_id'] !== '' ? (int)$item['incorporada_id'] : null; // NUEVO
         
         // Bloqueo de fila (FOR UPDATE)
         $stmtCheck = $conn->prepare("SELECT precio, stock, nombre FROM productos WHERE id = ? LIMIT 1 FOR UPDATE");
@@ -81,9 +82,9 @@ try {
         $subtotal_item = $precio_real * $cantidad;
         $total_calculado += $subtotal_item;
 
-        // Insertar Detalle
-        $stmtDetalle = $conn->prepare("INSERT INTO detalles_pedido (pedido_id, producto_id, cantidad, precio_unitario, talla) VALUES (?, ?, ?, ?, ?)");
-        $stmtDetalle->bind_param("iiids", $pedido_id, $producto_id, $cantidad, $precio_real, $talla);
+        // NUEVO: Insertar Detalle con incorporada_id (se añade una 'i' al bind_param)
+        $stmtDetalle = $conn->prepare("INSERT INTO detalles_pedido (pedido_id, producto_id, cantidad, precio_unitario, talla, incorporada_id) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmtDetalle->bind_param("iiidsi", $pedido_id, $producto_id, $cantidad, $precio_real, $talla, $incorporada_id);
         $stmtDetalle->execute();
         $stmtDetalle->close();
 
@@ -123,11 +124,26 @@ try {
             $stmtLog->close();
         }
 
-        // Construir fila para el HTML del correo
+        // NUEVO: Obtener nombre de la empresa incorporada para el correo
+        $inc_nombre = "";
+        if ($incorporada_id) {
+            $stmtInc = $conn->prepare("SELECT nombre FROM incorporadas WHERE id = ?");
+            $stmtInc->bind_param("i", $incorporada_id);
+            $stmtInc->execute();
+            $stmtInc->bind_result($nombre_empresa);
+            if ($stmtInc->fetch()) {
+                $inc_nombre = $nombre_empresa;
+            }
+            $stmtInc->close();
+        }
+
+        // Construir fila para el HTML del correo (se agrega la empresa si existe)
         $tallaStr = $talla ? " (Talla: $talla)" : "";
+        $incStr = $inc_nombre ? "<br><span style='color: #00524A; font-size: 11px; font-weight: bold;'>[Empresa: $inc_nombre]</span>" : "";
+        
         $htmlTablaProductos .= "
             <tr>
-                <td style='padding: 8px; border-bottom: 1px solid #ddd; font-size: 13px;'>{$prodDB['nombre']}{$tallaStr}</td>
+                <td style='padding: 8px; border-bottom: 1px solid #ddd; font-size: 13px;'>{$prodDB['nombre']}{$tallaStr}{$incStr}</td>
                 <td style='padding: 8px; border-bottom: 1px solid #ddd; text-align: center;'>{$cantidad}</td>
                 <td style='padding: 8px; border-bottom: 1px solid #ddd; text-align: right;'>$" . number_format($subtotal_item, 2) . "</td>
             </tr>";
@@ -138,7 +154,7 @@ try {
          $conn->query("UPDATE pedidos SET monto_total = $total_calculado WHERE id = $pedido_id");
     }
 
-    // --- NUEVO: GENERACIÓN DE CUOTAS PARA NÓMINA (AMORTIZACIÓN) ---
+    // --- GENERACIÓN DE CUOTAS PARA NÓMINA (AMORTIZACIÓN) ---
     $monto_cuota = round($total_calculado / $plazos, 2);
     $suma_cuotas = $monto_cuota * $plazos;
     $ajuste_centavos = round($total_calculado - $suma_cuotas, 2);
@@ -152,7 +168,6 @@ try {
         $stmtPagos->execute();
         $stmtPagos->close();
     }
-    // --- FIN BLOQUE NUEVO ---
 
     // --- 4. CONFIRMAR TRANSACCIÓN (COMMIT) ---
     $conn->commit();

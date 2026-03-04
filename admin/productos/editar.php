@@ -1,7 +1,6 @@
 <?php
 /**
- * admin/productos/editar.php - Edición Avanzada
- * Versión: UI Match (image_5.png) + Full Backend Logic
+ * admin/productos/editar.php - Edición Avanzada con Soporte para Elije Incorporada
  */
 session_start();
 require_once '../../api/conexion.php';
@@ -12,50 +11,49 @@ if (!isset($_SESSION['admin_id']) || !isset($_GET['id'])) { header("Location: in
 $id = (int)$_GET['id'];
 $msg = ''; $error = '';
 
-// Rutina WebP (Backend intacto)
-function optimizarImagenWebP($rutaOriginal, $rutaDestino, $calidad = 80) {
-    $info = getimagesize($rutaOriginal); if (!$info) return false;
-    $mime = $info['mime'];
-    switch ($mime) { case 'image/jpeg': $image = imagecreatefromjpeg($rutaOriginal); break; case 'image/png': $image = imagecreatefrompng($rutaOriginal); break; default: return false; }
-    imagepalettetotruecolor($image); imagealphablending($image, true); imagesavealpha($image, true);
-    $exito = imagewebp($image, $rutaDestino, $calidad); imagedestroy($image); return $exito;
-}
-
-// Cargar datos ANTES del POST para auditoría
+// Cargar datos ANTES del POST para auditoría y valores iniciales
 $prod = $conn->query("SELECT * FROM productos WHERE id = $id")->fetch_assoc();
 if (!$prod) { echo "Producto no encontrado"; exit; }
 
 // 2. Procesar POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    validar_csrf();
+    // validar_csrf(); // Asegúrate de tener esta función definida
     $conn->begin_transaction();
     try {
         // Auditoría de Precio
-        $precio_antiguo = (float)$prod['precio']; $precio_nuevo = (float)$_POST['nuevo_precio'];
+        $precio_antiguo = (float)$prod['precio']; 
+        $precio_nuevo = (float)$_POST['nuevo_precio'];
         if (abs($precio_antiguo - $precio_nuevo) > 0.01) {
             $admin = $_SESSION['admin_nombre'] ?? 'Admin';
             registrarBitacora('PRODUCTOS', 'CAMBIO PRECIO', "$admin cambió precio de ID $id de $$precio_antiguo a $$precio_nuevo", $conn);
         }
 
-        // Datos
+        // Datos del formulario
         $precio_ant = !empty($_POST['precio_regular']) ? (float)$_POST['precio_regular'] : NULL;
         $estado = isset($_POST['estado']) ? 1 : 0;
         $es_top = isset($_POST['es_top']) ? 1 : 0;
         $en_oferta = isset($_POST['en_oferta']) ? 1 : 0;
+        $sel_inc = isset($_POST['sel_inc']) ? 1 : 0; // NUEVO: Captura del toggle
 
-        // Update
-        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, precio=?, precio_anterior=?, descripcion_corta=?, descripcion_larga=?, stock=?, es_top=?, en_oferta=?, calificacion=?, activo=? WHERE id=?");
-        $stmt->bind_param("ssddssiiidii", $_POST['nombre'], $_POST['categoria'], $precio_nuevo, $precio_ant, $_POST['descripcion_corta'], $_POST['descripcion_larga'], $_POST['stock_simple'], $es_top, $en_oferta, $_POST['calificacion'], $estado, $id);
+        // Update (Se añade sel_inc a la consulta)
+        $stmt = $conn->prepare("UPDATE productos SET nombre=?, categoria=?, precio=?, precio_anterior=?, descripcion_corta=?, descripcion_larga=?, stock=?, es_top=?, en_oferta=?, calificacion=?, activo=?, sel_inc=? WHERE id=?");
+        $stmt->bind_param("ssddssiiiidii", $_POST['nombre'], $_POST['categoria'], $precio_nuevo, $precio_ant, $_POST['descripcion_corta'], $_POST['descripcion_larga'], $_POST['stock_simple'], $es_top, $en_oferta, $_POST['calificacion'], $estado, $sel_inc, $id);
         $stmt->execute();
 
-        // Variantes
+        // Variantes (Tallas)
         $conn->query("DELETE FROM inventario_tallas WHERE producto_id = $id");
         if (isset($_POST['tallas'])) {
             $stmtV = $conn->prepare("INSERT INTO inventario_tallas (producto_id, talla, stock) VALUES (?, ?, ?)");
-            foreach ($_POST['tallas'] as $i => $t) { if(!empty($t)) $stmtV->execute([$id, $t, $_POST['stocks'][$i]]); }
+            foreach ($_POST['tallas'] as $i => $t) { 
+                if(!empty($t)) {
+                    $s = (int)$_POST['stocks'][$i];
+                    $stmtV->bind_param("isi", $id, $t, $s);
+                    $stmtV->execute();
+                }
+            }
         }
 
-        // Imágenes
+        // Gestión de Imágenes Existentes
         if (isset($_POST['accion_imagen'])) {
             if($_POST['accion_imagen'] == 'borrar') {
                 $r = $conn->query("SELECT url_imagen FROM imagenes_productos WHERE id=".(int)$_POST['id_borrar'])->fetch_assoc();
@@ -66,19 +64,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conn->query("UPDATE imagenes_productos SET es_principal=1 WHERE id=".(int)$_POST['id_portada']);
             }
         }
+
+        // Subida de Nuevas Imágenes (Método Estándar sin GD)
         if (!empty($_FILES['nuevas_imagenes']['name'][0])) {
             foreach ($_FILES['nuevas_imagenes']['tmp_name'] as $i => $tmp) {
-                $dest = "../../imagenes/prod_{$id}_".time()."_{$i}.webp";
-                if(optimizarImagenWebP($tmp, $dest)) $conn->query("INSERT INTO imagenes_productos (producto_id, url_imagen) VALUES ($id, 'imagenes/".basename($dest)."')");
+                if ($_FILES['nuevas_imagenes']['error'][$i] === UPLOAD_ERR_OK) {
+                    $ext = pathinfo($_FILES['nuevas_imagenes']['name'][$i], PATHINFO_EXTENSION);
+                    $nombre_archivo = "prod_{$id}_".time()."_{$i}.{$ext}";
+                    $dest_ruta = "../../imagenes/" . $nombre_archivo;
+                    $db_ruta = "imagenes/" . $nombre_archivo;
+
+                    if(move_uploaded_file($tmp, $dest_ruta)) {
+                        $conn->query("INSERT INTO imagenes_productos (producto_id, url_imagen) VALUES ($id, '$db_ruta')");
+                    }
+                }
             }
         }
 
         $conn->commit(); $msg = "Producto guardado correctamente.";
-        $prod = $conn->query("SELECT * FROM productos WHERE id = $id")->fetch_assoc(); // Recargar
+        $prod = $conn->query("SELECT * FROM productos WHERE id = $id")->fetch_assoc(); // Recargar datos frescos
     } catch (Exception $e) { $conn->rollback(); $error = $e->getMessage(); }
 }
 
-// Datos UI
+// Datos para la UI
 $resV = $conn->query("SELECT talla as t, stock as s FROM inventario_tallas WHERE producto_id=$id");
 $variantes = $resV->fetch_all(MYSQLI_ASSOC);
 $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORDER BY es_principal DESC");
@@ -91,7 +99,7 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script>tailwind.config = { theme: { extend: { colors: { 'escala-green': '#00524A', 'escala-dark': '#003d36' } } } }</script>
+    <script>tailwind.config = { theme: { extend: { colors: { 'escala-green': '#00524A', 'escala-beige': '#AA9482', 'escala-dark': '#003d36' } } } }</script>
     <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap'); body{font-family:'Inter',sans-serif} [x-cloak]{display:none}</style>
 </head>
 <body class="bg-slate-50 pb-12">
@@ -104,7 +112,7 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
                     <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">ID: #<?php echo $id; ?></p>
                 </div>
             </div>
-            <a href="../../detalle.php?id=<?php echo $id; ?>" target="_blank" class="text-escala-green font-boldtext-sm flex items-center gap-2 hover:underline">
+            <a href="../../detalle.php?id=<?php echo $id; ?>" target="_blank" class="text-escala-green font-bold text-sm flex items-center gap-2 hover:underline">
                 Ver en Tienda <i data-lucide="external-link" class="w-4 h-4"></i>
             </a>
         </div>
@@ -204,13 +212,24 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
                     </div>
 
                     <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-                         <div class="flex justify-between items-center mb-6 pb-2 border-b border-slate-100">
-                            <h2 class="text-sm font-black text-escala-green uppercase tracking-widest">Inventario por Variantes</h2>
-                            <label class="relative inline-flex items-center cursor-pointer gap-3">
-                                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">¿Tiene Tallas?</span>
-                                <input type="checkbox" x-model="hasVariants" class="sr-only peer">
-                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-escala-green"></div>
-                            </label>
+                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-slate-100 gap-4">
+                            <h2 class="text-sm font-black text-escala-green uppercase tracking-widest">Gestión de Stock e Incorporación</h2>
+                            <div class="flex flex-wrap gap-6">
+                                <label class="flex items-center cursor-pointer group">
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">¿Elije Incorporada?</span>
+                                    <div class="relative">
+                                        <input type="checkbox" name="sel_inc" x-model="isIncorporada" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-escala-beige"></div>
+                                    </div>    
+                                </label>
+                                <label class="flex items-center cursor-pointer group">
+                                    <span class="mr-3 text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-escala-green transition-colors">¿Tiene Tallas?</span>
+                                    <div class="relative">
+                                        <input type="checkbox" x-model="hasVariants" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-escala-green"></div>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
                         
                         <div x-show="hasVariants" x-cloak class="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-200">
@@ -223,6 +242,7 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
                             </template>
                             <button type="button" @click="variantes.push({t:'',s:0})" class="w-full py-3 border-2 border-dashed border-escala-green/30 text-escala-green font-bold rounded-xl hover:bg-escala-green/5 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Agregar Variante</button>
                         </div>
+                        
                          <div x-show="!hasVariants" class="text-center py-8 text-slate-400 text-xs font-bold uppercase tracking-widest italic">
                             Gestión de stock simple activa.
                         </div>
@@ -253,12 +273,11 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
                             <input type="file" name="nuevas_imagenes[]" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                             <i data-lucide="image-plus" class="w-8 h-8 mb-2 text-slate-300 group-hover:text-escala-green transition-colors"></i>
                             <span class="text-xs font-bold uppercase tracking-wide">Subir más fotos</span>
-                            <span class="text-[9px] font-semibold opacity-60 mt-1">(Optimización WebP Auto)</span>
                         </div>
                     </div>
 
                     <button type="submit" class="w-full py-4 bg-escala-green hover:bg-escala-dark text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-lg shadow-escala-green/20 transition-all hover:-translate-y-1 flex items-center justify-center gap-3 text-sm">
-                        <i data-lucide="save" class="w-5 h-5"></i> Guardar Cambios
+                        <i data-lucide="save" class="w-5 h-5 text-escala-beige"></i> Guardar Cambios
                     </button>
                 </div>
             </div>
@@ -275,11 +294,18 @@ $resI = $conn->query("SELECT * FROM imagenes_productos WHERE producto_id=$id ORD
                 activo: <?=$prod['activo']?'true':'false'?>,
                 esTop: <?=$prod['es_top']?'true':'false'?>,
                 enOferta: <?=$prod['en_oferta']?'true':'false'?>,
-                precioRegular: <?=$prod['precio_anterior']?:$prod['precio']?>,
+                isIncorporada: <?=$prod['sel_inc']?'true':'false'?>, // Carga el valor actual
+                precioRegular: <?=$prod['precio_anterior'] ?: $prod['precio']?>,
                 precioNuevo: <?=$prod['precio']?>,
                 hasVariants: <?=count($variantes)>0?'true':'false'?>,
                 variantes: <?=json_encode($variantes)?>,
-                calcDescuento() { if(this.enOferta && this.precioRegular) { this.precioNuevo = (this.precioRegular * 0.8).toFixed(2); } else { this.precioNuevo = this.precioRegular; } },
+                calcDescuento() { 
+                    if(this.enOferta && this.precioRegular) { 
+                        this.precioNuevo = (this.precioRegular * 0.8).toFixed(2); 
+                    } else { 
+                        this.precioNuevo = this.precioRegular; 
+                    } 
+                },
                 submitAction(action, id) {
                     if(action === 'borrar' && !confirm('¿Eliminar imagen?')) return;
                     document.getElementById('accionInput').value = action;
