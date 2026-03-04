@@ -1,6 +1,6 @@
 <?php
 /**
- * mis_pedidos.php - Historial de Compras con Desglose Quincenal
+ * mis_pedidos.php - Historial de Compras con Desglose Quincenal y Empresas (Incorporadas)
  * Versión: Frontend Optimizado (Lazy Loading)
  */
 require_once 'api/conexion.php';
@@ -31,16 +31,20 @@ $res = $stmt->get_result();
 while($row = $res->fetch_assoc()) {
     $pid = $row['id'];
     
-    // Consulta de detalles para cada pedido
+    // Consulta de detalles para cada pedido (MODIFICADA PARA INCLUIR INCORPORADAS)
     $stmtDet = $conn->prepare("
         SELECT 
             dp.cantidad, 
             dp.precio_unitario, 
             dp.talla, 
+            dp.incorporada_id,
             p.nombre,
+            i.nombre as inc_nombre,
+            i.url_img as inc_img,
             (SELECT url_imagen FROM imagenes_productos ip WHERE ip.producto_id = p.id ORDER BY ip.es_principal DESC LIMIT 1) as imagen_url
         FROM detalles_pedido dp
         JOIN productos p ON dp.producto_id = p.id
+        LEFT JOIN incorporadas i ON dp.incorporada_id = i.id
         WHERE dp.pedido_id = ?
     ");
     
@@ -198,21 +202,38 @@ $stmt->close();
                                 <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-5 ml-2">Artículos Solicitados:</p>
                                 <div class="space-y-4">
                                     <?php foreach($p['items'] as $item): ?>
-                                        <div class="flex items-center gap-6 p-4 bg-white rounded-2xl border border-transparent hover:border-slate-200 transition-all shadow-sm group/item">
-                                            <div class="w-16 h-16 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center shrink-0 p-2 overflow-hidden group-hover/item:scale-105 transition-transform">
+                                        <div class="flex items-center gap-6 p-4 bg-white rounded-2xl border border-transparent hover:border-slate-200 transition-all shadow-sm group/item relative">
+                                            
+                                            <div class="w-16 h-16 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center shrink-0 p-2 overflow-hidden group-hover/item:scale-105 transition-transform relative">
                                                 <img src="<?php echo $item['img']; ?>" 
                                                      loading="lazy"
                                                      class="w-full h-full object-contain" 
                                                      onerror="this.onerror=null; this.src='imagenes/torito.png';">
                                             </div>
-                                            <div class="flex-grow">
+                                            
+                                            <div class="flex-grow flex flex-col justify-center">
                                                 <p class="text-sm font-black text-slate-700 uppercase tracking-tight leading-none mb-1"><?php echo $item['nombre']; ?></p>
-                                                <?php if(!empty($item['talla'])): ?>
-                                                    <span class="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-black uppercase tracking-tighter">
-                                                        Talla: <?php echo $item['talla']; ?>
-                                                    </span>
-                                                <?php endif; ?>
+                                                <div class="flex items-center flex-wrap gap-2 mt-1">
+                                                    <?php if(!empty($item['talla'])): ?>
+                                                        <span class="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-black uppercase tracking-tighter">
+                                                            Talla: <?php echo $item['talla']; ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if(!empty($item['incorporada_id'])): ?>
+                                                        <span class="text-[9px] bg-blue-50 text-escala-blue px-2 py-0.5 rounded-md font-black uppercase tracking-tighter flex items-center gap-1">
+                                                            <i data-lucide="building" class="w-3 h-3"></i> <?php echo htmlspecialchars($item['inc_nombre']); ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
+
+                                            <?php if(!empty($item['inc_img'])): ?>
+                                                <div class="hidden md:flex items-center justify-center h-10 w-16 px-2 opacity-50 grayscale group-hover/item:grayscale-0 group-hover/item:opacity-100 transition-all">
+                                                    <img src="<?php echo $item['inc_img']; ?>" class="max-h-full max-w-full object-contain" title="<?php echo htmlspecialchars($item['inc_nombre']); ?>">
+                                                </div>
+                                            <?php endif; ?>
+
                                             <div class="text-right flex flex-col items-end">
                                                 <span class="text-[10px] font-black text-slate-300 uppercase mb-1 tracking-widest">Cant. <?php echo $item['cantidad']; ?></span>
                                                 <span class="text-base font-black text-escala-green tracking-tighter">$<?php echo number_format($item['cantidad'] * $item['precio_unitario'], 2); ?></span>
