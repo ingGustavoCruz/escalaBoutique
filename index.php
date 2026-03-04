@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción Final (Optimizado y Verificado con Lazy Loading + Incorporadas)
+ * Versión: Producción Final (Optimizado, Lazy Loading, Incorporadas y Envíos Foráneos)
  */
 session_start();
 error_reporting(E_ALL);
@@ -61,11 +61,9 @@ $categorias = ['todos'];
 
 if ($resultado && $resultado->num_rows > 0) {
     while($row = $resultado->fetch_assoc()) {
-        // Procesamiento de Imágenes
         $imgsRaw = $row['lista_imagenes'] ? explode(',', $row['lista_imagenes']) : [];
         $row['imagenes'] = array_values(array_filter($imgsRaw, function($v){ return !empty($v); }));
 
-        // Procesamiento de Variantes
         $row['variantes'] = []; 
         if (!empty($row['lista_tallas_stock'])) {
             $pares = explode(',', $row['lista_tallas_stock']);
@@ -77,7 +75,6 @@ if ($resultado && $resultado->num_rows > 0) {
             }
         }
 
-        // Casteo de Tipos (Importante para JS)
         $row['precio'] = (float)$row['precio'];
         $row['precio_base'] = (float)$row['precio'];
         $row['precio_anterior'] = $row['precio_anterior'] ? (float)$row['precio_anterior'] : 0;
@@ -85,9 +82,8 @@ if ($resultado && $resultado->num_rows > 0) {
         $row['en_oferta'] = (int)$row['en_oferta'];
         $row['es_top'] = (int)$row['es_top'];
         $row['calificacion'] = (float)($row['calificacion'] ?? 5.0);
-        $row['sel_inc'] = (int)$row['sel_inc']; // <-- CASTEO PARA INCORPORADAS
+        $row['sel_inc'] = (int)$row['sel_inc'];
         
-        // Categorías
         $catClean = isset($row['categoria']) ? strtolower(trim($row['categoria'])) : 'general';
         $catClean = empty($catClean) ? 'general' : $catClean;
         $row['categoria_normalizada'] = $catClean;
@@ -155,6 +151,17 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 userMenuOpen: false,
                 cart: JSON.parse(localStorage.getItem('cart_escala')) || [],
                 
+                // --- NUEVAS VARIABLES PARA ENVÍO ---
+                requiereEnvio: false,
+                formEnvio: { estado: '', calle: '', colonia: '', cp: '', nombre_contacto: '', telefono_contacto: '' },
+                estadosRepublica: [
+                    'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche', 'Chiapas', 
+                    'Chihuahua', 'Coahuila', 'Colima', 'Durango', 'Guanajuato', 'Guerrero', 'Hidalgo', 
+                    'Jalisco', 'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca', 'Puebla', 
+                    'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa', 'Sonora', 'Tabasco', 
+                    'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas'
+                ],
+                
                 init() {
                     setTimeout(() => {
                         this.isLoading = false;
@@ -188,11 +195,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     })
                     .then(r => r.json())
                     .then(data => {
-                        if(data.status === 'success') {
-                            window.location.reload(); 
-                        } else {
-                            alert(data.message);
-                        }
+                        if(data.status === 'success') { window.location.reload(); } else { alert(data.message); }
                     });
                 },
 
@@ -224,7 +227,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 openModal(p) { 
                     this.selectedProduct = JSON.parse(JSON.stringify(p)); 
                     this.selectedProduct.sizeSelected = ''; 
-                    this.selectedProduct.incSelected = ''; // Limpiamos selección de empresa
+                    this.selectedProduct.incSelected = '';
                     this.activeImgModal = 0; 
                 },
 
@@ -242,7 +245,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     }
                     
                     const qtyNum = parseInt(qty);
-                    // Comprobamos si ya existe el mismo producto con la misma talla y el mismo logo
                     const itemIndex = this.cart.findIndex(i => i.id === p.id && i.talla === size && i.incorporada_id === incId);
                     const finalPrice = this.getPrice(p);
 
@@ -269,7 +271,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             qty: qtyNum,
                             stock: stockReal,
                             talla: size,
-                            incorporada_id: incId // Guardamos el ID de la incorporada seleccionada
+                            incorporada_id: incId
                         });
                     }
                     this.saveCart();
@@ -302,14 +304,35 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     return inc ? inc.nombre : '';
                 },
 
-                iniciarTramite() { this.cartOpen = false; this.showPayrollModal = true; },
+                iniciarTramite() { 
+                    this.cartOpen = false; 
+                    this.showPayrollModal = true; 
+                    // Limpiamos los datos de envío cada vez que se abre
+                    this.requiereEnvio = false;
+                    this.formEnvio = { estado: '', calle: '', colonia: '', cp: '', nombre_contacto: '', telefono_contacto: '' };
+                },
 
                 confirmarPedidoNomina() {
+                    // VALIDACIÓN DEL FORMULARIO DE ENVÍO
+                    if (this.requiereEnvio) {
+                        const f = this.formEnvio;
+                        if (!f.estado || !f.calle.trim() || !f.colonia.trim() || !f.cp.trim() || !f.nombre_contacto.trim() || !f.telefono_contacto.trim()) {
+                            alert('Por favor, completa todos los campos de la dirección de envío.');
+                            return; // Evita que se procese la compra
+                        }
+                    }
+
                     this.isPaying = true;
                     fetch('api/procesar_pedido_nomina.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cart: this.cart, total: this.totalPrice(), plazos: this.plazos })
+                        body: JSON.stringify({ 
+                            cart: this.cart, 
+                            total: this.totalPrice(), 
+                            plazos: this.plazos,
+                            requiereEnvio: this.requiereEnvio, // Enviamos el flag
+                            formEnvio: this.formEnvio // Enviamos los datos
+                        })
                     })
                     .then(res => res.json())
                     .then(data => {
@@ -346,65 +369,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         body { font-family: system-ui, -apple-system, sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        .badge-top { 
-            background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); 
-            color: white; 
-            font-weight: 800; 
-            padding: 5px 15px; 
-            clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); 
-            z-index: 10; 
-            font-size: 10px; 
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.2); 
-        }
-        
-        .badge-blue-gradient {
-            background: linear-gradient(90deg, #1e3a8a 0%, #22d3ee 100%);
-            color: white;
-            font-weight: 900;
-            padding: 5px 22px 5px 12px;
-            clip-path: polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%);
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.2));
-            z-index: 10;
-        }
-
-        .badge-right { 
-            color: white; 
-            font-weight: 900; 
-            padding: 4px 10px 4px 18px; 
-            clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); 
-            z-index: 10; 
-            font-size: 10px; 
-            margin-bottom: 4px; 
-            text-transform: uppercase; 
-            box-shadow: -2px 2px 5px rgba(0,0,0,0.1); 
-        }
-        
+        .badge-top { background: linear-gradient(90deg, #00524A 0%, #16ed48 100%); color: white; font-weight: 800; padding: 5px 15px; clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%); z-index: 10; font-size: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
+        .badge-blue-gradient { background: linear-gradient(90deg, #1e3a8a 0%, #22d3ee 100%); color: white; font-weight: 900; padding: 5px 22px 5px 12px; clip-path: polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.2)); z-index: 10; }
+        .badge-right { color: white; font-weight: 900; padding: 4px 10px 4px 18px; clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); z-index: 10; font-size: 10px; margin-bottom: 4px; text-transform: uppercase; box-shadow: -2px 2px 5px rgba(0,0,0,0.1); }
         .bg-sale { background-color: #FF9900; }
         .bg-last { background-color: #EF4444; }
-        
-        .btn-add { 
-            background-color: #00524A; 
-            color: white; 
-            transition: 0.3s; 
-            border-radius: 8px; 
-            font-weight: 900; 
-            letter-spacing: 0.05em; 
-            text-transform: uppercase; 
-            font-size: 11px; 
-        }
-        .btn-add:hover { 
-            background-color: #003d36; 
-            transform: translateY(-2px); 
-            box-shadow: 0 5px 15px rgba(0,82,74,0.3); 
-        }
-        .size-btn-active { 
-            background-color: #00524A; 
-            color: white; 
-            border-color: #00524A; 
-        }
+        .btn-add { background-color: #00524A; color: white; transition: 0.3s; border-radius: 8px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
+        .btn-add:hover { background-color: #003d36; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,82,74,0.3); }
+        .size-btn-active { background-color: #00524A; color: white; border-color: #00524A; }
     </style>
 </head>
 
@@ -480,9 +452,6 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             <a href="api/logout_cupon.php" class="ml-1 text-white/50 hover:text-red-400 transition-colors bg-black/20 rounded-full p-1"><i data-lucide="x" class="w-3 h-3"></i></a>
                         </div>
                     </template>
-                    <div class="flex justify-end mb-6">
-    
-</div>
                     <template x-if="!coupon">
                         <div class="relative w-full md:w-48">
                             <input type="text" x-model="couponCodeInput" @keydown.enter="aplicarCupon()" placeholder="CÓDIGO PROMOCIONAL" 
@@ -508,28 +477,19 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
         </div>
 
         <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" x-cloak x-transition.opacity>
-            
             <template x-for="p in filteredProducts" :key="p.id">
                 <div class="bg-white rounded-3xl p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] transition-all duration-300 border border-escala-dark flex flex-col relative group"
                      :class="{'opacity-60 grayscale pointer-events-none select-none': p.stock === 0}" 
                      x-data="{ activeImg: 0, qty: 1 }">
                 
                     <div class="absolute top-4 left-0 z-20 flex flex-col items-start gap-1">
-                        <div x-show="p.es_top == 1 && p.stock > 0">
-                            <div class="badge-top">TOP VENTAS</div>
-                        </div>
-                        <div x-show="coupon && getPrice(p) < p.precio_base && p.stock > 0" class="badge-blue-gradient">
-                            CUPÓN APLICADO
-                        </div>
+                        <div x-show="p.es_top == 1 && p.stock > 0"><div class="badge-top">TOP VENTAS</div></div>
+                        <div x-show="coupon && getPrice(p) < p.precio_base && p.stock > 0" class="badge-blue-gradient">CUPÓN APLICADO</div>
                     </div>
                     
                     <div class="absolute top-4 right-0 flex flex-col items-end space-y-2 z-20">
                          <div x-show="p.stock <= 5 && p.stock > 0" class="badge-right bg-last">¡ÚLTIMAS PIEZAS!</div>
-                         
-                         <div x-show="p.en_oferta == 1 && !coupon && p.stock > 0" class="badge-right bg-sale">
-                             EN OFERTA
-                         </div>
-                         
+                         <div x-show="p.en_oferta == 1 && !coupon && p.stock > 0" class="badge-right bg-sale">EN OFERTA</div>
                          <div x-show="p.stock === 0" class="badge-right bg-gray-500">AGOTADO</div>
                     </div>
 
@@ -543,21 +503,14 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
                         <template x-if="p.imagenes && p.imagenes.length > 1">
                             <div class="absolute inset-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                                <button @click.stop="activeImg = (activeImg === 0) ? p.imagenes.length - 1 : activeImg - 1" 
-                                        class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110">
-                                    <i data-lucide="chevron-left" class="w-5 h-5"></i>
-                                </button>
-                                <button @click.stop="activeImg = (activeImg === p.imagenes.length - 1) ? 0 : activeImg + 1" 
-                                        class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110">
-                                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
-                                </button>
+                                <button @click.stop="activeImg = (activeImg === 0) ? p.imagenes.length - 1 : activeImg - 1" class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                                <button @click.stop="activeImg = (activeImg === p.imagenes.length - 1) ? 0 : activeImg + 1" class="pointer-events-auto p-2 bg-white/80 hover:bg-white rounded-full shadow-md text-escala-dark hover:text-escala-green transition-all transform hover:scale-110"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                             </div>
                         </template>
                     </div>
 
                     <div class="flex flex-col flex-grow items-center text-center">
                         <span class="text-[9px] bg-gray-200 text-gray-500 px-2 py-1 rounded mb-2" x-text="'[CAT: ' + p.categoria_normalizada.toUpperCase() + ']'"></span>
-
                         <h3 class="font-black text-xl text-slate-900 mb-2 uppercase leading-tight line-clamp-2" x-text="p.nombre"></h3>
                         <p class="text-xs text-gray-500 font-medium mb-3 px-2 line-clamp-2 min-h-[2.5em] leading-snug" x-text="p.descripcion_corta || ''"></p>
                         
@@ -568,8 +521,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         </div>
 
                         <p class="text-xs text-gray-500 mb-6 font-bold uppercase tracking-wider">
-                            STOCK: 
-                            <span :class="p.stock > 0 ? 'text-blue-600' : 'text-red-500'" x-text="p.stock > 0 ? p.stock : 'AGOTADO'"></span>
+                            STOCK: <span :class="p.stock > 0 ? 'text-blue-600' : 'text-red-500'" x-text="p.stock > 0 ? p.stock : 'AGOTADO'"></span>
                         </p>
 
                         <div class="mt-auto w-full">
@@ -581,33 +533,20 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 </div>
                                 
                                 <div class="flex flex-col items-start">
-                                    <span class="text-sm text-gray-400 line-through font-medium" 
-                                          x-show="(p.precio_anterior > p.precio_base) || getPrice(p) < p.precio_base"
-                                          x-text="'$' + (p.precio_anterior > p.precio_base ? p.precio_anterior : p.precio_base).toFixed(2)">
-                                    </span>
-                                    
-                                    <span class="text-3xl font-black" 
-                                          :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                          x-text="'$' + getPrice(p).toFixed(2)"></span>
-                                          
-                                    <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">
-                                        Desde $<span x-text="(getPrice(p)/3).toFixed(2)"></span> /qna
-                                    </span>
+                                    <span class="text-sm text-gray-400 line-through font-medium" x-show="(p.precio_anterior > p.precio_base) || getPrice(p) < p.precio_base" x-text="'$' + (p.precio_anterior > p.precio_base ? p.precio_anterior : p.precio_base).toFixed(2)"></span>
+                                    <span class="text-3xl font-black" :class="getPrice(p) < p.precio_base ? 'text-red-500' : 'text-escala-green'" x-text="'$' + getPrice(p).toFixed(2)"></span>
+                                    <span class="text-[10px] font-bold text-escala-beige bg-escala-beige/10 px-2 py-0.5 rounded mt-1">Desde $<span x-text="(getPrice(p)/3).toFixed(2)"></span> /qna</span>
                                 </div>
                             </div>
 
                             <div class="flex flex-col gap-3 w-full">
                                 <button @click="if(p.stock > 0) { ((!p.variantes || p.variantes.length === 0) && p.sel_inc !== 1) ? addToCart(p, qty) : openModal(p) }" 
                                         class="w-full py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all"
-                                        :class="p.stock === 0 ? 'bg-gray-400 cursor-not-allowed text-white shadow-none' : 'btn-add'"
-                                        :disabled="p.stock === 0">
-                                    
+                                        :class="p.stock === 0 ? 'bg-gray-400 cursor-not-allowed text-white shadow-none' : 'btn-add'" :disabled="p.stock === 0">
                                     <i x-show="p.stock > 0" data-lucide="shopping-cart" class="w-5 h-5"></i>
                                     <i x-show="p.stock === 0" data-lucide="x-circle" class="w-5 h-5"></i>
-                                    
                                     <span x-text="p.stock === 0 ? 'AGOTADO' : ( (p.variantes && p.variantes.length > 0) || p.sel_inc === 1 ? 'CONFIGURAR OPCIONES' : 'AÑADIR AL CARRITO')"></span>
                                 </button>
-                                
                                 <button @click="openModal(p)" class="w-full py-2.5 flex items-center justify-center gap-2 bg-white border border-escala-dark text-escala-dark rounded-xl font-bold uppercase text-[10px] hover:bg-gray-50 transition-all">
                                     <i data-lucide="info" class="w-3 h-3"></i> MÁS INFORMACIÓN
                                 </button>
@@ -622,8 +561,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <p class="font-medium text-lg">No se encontraron productos.</p>
             </div>
         </div>
-        <div class="relative w-50 h-10 mt-4"><a href="preguntas.php" class="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-escala-green hover:border-escala-green transition-all shadow-sm group"><i data-lucide="help-circle" class="w-4 h-4 text-gray-300 group-hover:text-escala-green transition-colors"></i>¿CÓMO FUNCIONA ESCALA BOUTIQUE? - FAQ</a>
-        </div>
+        <div class="relative w-50 h-10 mt-4"><a href="preguntas.php" class="flex items-center gap-2 bg-white border border-gray-200 px-5 py-2.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-escala-green hover:border-escala-green transition-all shadow-sm group"><i data-lucide="help-circle" class="w-4 h-4 text-gray-300 group-hover:text-escala-green transition-colors"></i>¿CÓMO FUNCIONA ESCALA BOUTIQUE? - FAQ</a></div>
     </main>
 
     <footer class="bg-gray-50 py-6 border-t-2 border-escala-blue mt-auto">
@@ -645,8 +583,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
     <div x-show="cartOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" @click="cartOpen = false" x-cloak x-transition.opacity></div>
     <div x-show="cartOpen" 
          class="fixed bottom-28 right-4 z-50 w-72 bg-white shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-300 border border-gray-100 max-h-[60vh] h-auto origin-bottom"
-         :class="cartOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-10 opacity-0 scale-95 pointer-events-none'"
-         x-cloak>
+         :class="cartOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-10 opacity-0 scale-95 pointer-events-none'" x-cloak>
         <div class="p-3 bg-escala-dark flex justify-between items-center shadow-md shrink-0">
             <h2 class="font-bold text-xs text-white tracking-widest uppercase">Tu Carrito</h2>
             <button @click="cartOpen = false" class="p-1 bg-white/20 hover:bg-white/30 rounded-full transition-all duration-300 hover:rotate-90 text-white"><i data-lucide="x" class="w-3 h-3"></i></button>
@@ -660,12 +597,8 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-[10px] text-slate-800 uppercase leading-none mb-1 truncate" x-text="item.nombre"></h4>
                         <div class="flex items-center flex-wrap gap-1">
-                            <template x-if="item.talla">
-                                 <span class="text-[9px] font-bold text-gray-500 bg-gray-100 px-1 rounded" x-text="'Talla: ' + item.talla"></span>
-                            </template>
-                            <template x-if="item.incorporada_id">
-                                 <span class="text-[9px] font-bold text-escala-blue bg-blue-50 px-1 rounded truncate max-w-[80px]" x-text="getIncName(item.incorporada_id)"></span>
-                            </template>
+                            <template x-if="item.talla"><span class="text-[9px] font-bold text-gray-500 bg-gray-100 px-1 rounded" x-text="'Talla: ' + item.talla"></span></template>
+                            <template x-if="item.incorporada_id"><span class="text-[9px] font-bold text-escala-blue bg-blue-50 px-1 rounded truncate max-w-[80px]" x-text="getIncName(item.incorporada_id)"></span></template>
                         </div>
                         <p class="text-escala-green font-black text-xs mt-1" x-text="'$' + (item.precio * item.qty).toFixed(2)"></p>
                     </div>
@@ -700,15 +633,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                  x-data="{ activeImgModal: 0, modalQty: 1 }">
                 
                 <div class="w-full md:w-1/2 bg-gray-50 p-12 flex items-center justify-center relative group">
-                    <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) 
-                                ? selectedProduct.imagenes[activeImgModal] 
-                                : 'imagenes/torito.png'" 
-                         loading="lazy"
-                         onerror="this.onerror=null; this.src='imagenes/torito.png';"
-                         class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
-                    
+                    <img :src="(selectedProduct.imagenes && selectedProduct.imagenes.length > 0 && selectedProduct.imagenes[activeImgModal]) ? selectedProduct.imagenes[activeImgModal] : 'imagenes/torito.png'" 
+                         loading="lazy" onerror="this.onerror=null; this.src='imagenes/torito.png';" class="max-h-[400px] w-auto object-contain drop-shadow-2xl transition-all duration-300 mix-blend-multiply">
                     <button @click="selectedProduct = null" class="absolute top-6 left-6 md:hidden p-3 bg-white rounded-full shadow-md text-gray-800 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-6 h-6"></i></button>
-                    
                     <template x-if="selectedProduct.imagenes && selectedProduct.imagenes.length > 1">
                         <div class="absolute inset-0 flex items-center justify-between px-6 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button @click="activeImgModal = (activeImgModal === 0) ? selectedProduct.imagenes.length - 1 : activeImgModal - 1" class="p-3 bg-white rounded-full shadow-lg hover:bg-blue-50 text-blue-900 transition-colors"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
@@ -726,42 +653,24 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="mb-6 space-y-4">
                         <div class="flex items-center gap-2">
                             <div class="flex text-yellow-400">
-                                <template x-for="i in 5">
-                                    <i data-lucide="star" class="w-4 h-4" :class="i <= selectedProduct.calificacion ? 'fill-current' : 'text-gray-200'"></i>
-                                </template>
+                                <template x-for="i in 5"><i data-lucide="star" class="w-4 h-4" :class="i <= selectedProduct.calificacion ? 'fill-current' : 'text-gray-200'"></i></template>
                             </div>
-                            <span class="text-xs font-bold uppercase tracking-wide" 
-                                  :class="selectedProduct.stock > 0 ? 'text-gray-400' : 'text-red-500'"
-                                  x-text="selectedProduct.stock > 0 ? 'Stock: ' + selectedProduct.stock : '¡AGOTADO!'"></span>
+                            <span class="text-xs font-bold uppercase tracking-wide" :class="selectedProduct.stock > 0 ? 'text-gray-400' : 'text-red-500'" x-text="selectedProduct.stock > 0 ? 'Stock: ' + selectedProduct.stock : '¡AGOTADO!'"></span>
                         </div>
 
                         <template x-if="selectedProduct.variantes && selectedProduct.variantes.length > 0">
                             <div>
                                 <div class="flex justify-between items-end mb-2">
                                     <p class="text-xs font-bold text-slate-800 uppercase">Selecciona Talla:</p>
-                                    <template x-if="selectedProduct.sizeSelected">
-                                        <span class="text-[10px] font-bold text-escala-green" 
-                                              x-text="'Disponibles: ' + (selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected)?.stock || 0)">
-                                        </span>
-                                    </template>
+                                    <template x-if="selectedProduct.sizeSelected"><span class="text-[10px] font-bold text-escala-green" x-text="'Disponibles: ' + (selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected)?.stock || 0)"></span></template>
                                 </div>
-
                                 <div class="flex flex-wrap gap-2">
                                     <template x-for="v in selectedProduct.variantes" :key="v.talla">
                                         <button @click="if(v.stock > 0) { selectedProduct.sizeSelected = v.talla; modalQty = 1; }"
                                                 class="px-4 py-2 rounded-lg border font-bold text-sm transition-all relative overflow-hidden"
-                                                :class="{
-                                                    'size-btn-active shadow-md': selectedProduct.sizeSelected === v.talla,
-                                                    'bg-white text-gray-500 border-gray-200 hover:border-escala-green': selectedProduct.sizeSelected !== v.talla && v.stock > 0,
-                                                    'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed': v.stock === 0
-                                                }"
-                                                :disabled="v.stock === 0">
+                                                :class="{ 'size-btn-active shadow-md': selectedProduct.sizeSelected === v.talla, 'bg-white text-gray-500 border-gray-200 hover:border-escala-green': selectedProduct.sizeSelected !== v.talla && v.stock > 0, 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed': v.stock === 0 }" :disabled="v.stock === 0">
                                             <span x-text="v.talla"></span>
-                                            <template x-if="v.stock === 0">
-                                                <div class="absolute inset-0 flex items-center justify-center bg-white/50">
-                                                    <div class="w-full h-[1px] bg-red-300 rotate-45 transform"></div>
-                                                </div>
-                                            </template>
+                                            <template x-if="v.stock === 0"><div class="absolute inset-0 flex items-center justify-center bg-white/50"><div class="w-full h-[1px] bg-red-300 rotate-45 transform"></div></div></template>
                                         </button>
                                     </template>
                                 </div>
@@ -777,15 +686,13 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                         <button @click="selectedProduct.incSelected = inc.id"
                                                 class="border-2 rounded-xl p-3 flex items-center justify-center transition-all bg-white hover:border-escala-green h-16 w-full group relative overflow-hidden"
                                                 :class="selectedProduct.incSelected === inc.id ? 'border-escala-green shadow-md ring-2 ring-escala-green/20' : 'border-gray-200'">
-                                            <img :src="inc.url_img" :alt="inc.nombre" class="max-h-full max-w-full object-contain filter group-hover:grayscale-0 transition-all"
-                                                 :class="selectedProduct.incSelected === inc.id ? 'grayscale-0 scale-105' : 'grayscale opacity-70'">
+                                            <img :src="inc.url_img" :alt="inc.nombre" class="max-h-full max-w-full object-contain filter group-hover:grayscale-0 transition-all" :class="selectedProduct.incSelected === inc.id ? 'grayscale-0 scale-105' : 'grayscale opacity-70'">
                                         </button>
                                     </template>
                                 </div>
                                 <p x-show="!selectedProduct.incSelected" class="text-[10px] text-red-500 font-bold mt-1">* Requerido</p>
                             </div>
                         </template>
-
                     </div>
                     
                     <p class="text-gray-600 text-base mb-8 leading-relaxed font-medium" x-text="selectedProduct.descripcion_larga || selectedProduct.descripcion_corta"></p>
@@ -798,17 +705,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                                 <button @click="let max = selectedProduct.sizeSelected ? selectedProduct.variantes.find(v => v.talla === selectedProduct.sizeSelected).stock : selectedProduct.stock; if(modalQty < max) modalQty++; else alert('Stock máximo alcanzado para esta configuración');" class="text-slate-600 hover:text-escala-green transition-colors font-bold text-lg px-2">+</button>
                             </div>
                             <div class="text-right">
-                                <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" 
-                                      class="text-sm text-gray-400 line-through font-medium block" 
-                                      x-text="'$' + (selectedProduct.precio_anterior > selectedProduct.precio_base ? selectedProduct.precio_anterior : selectedProduct.precio_base).toFixed(2)"></span>
-                                
-                                <span class="text-4xl font-black" 
-                                      :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'"
-                                      x-text="'$' + getPrice(selectedProduct).toFixed(2)"></span>
-                                
-                                <span class="text-xs font-bold text-escala-beige block mt-1">
-                                    Desde $<span x-text="(getPrice(selectedProduct)/3).toFixed(2)"></span> /qna
-                                </span>
+                                <span x-show="(selectedProduct.precio_anterior > selectedProduct.precio_base) || getPrice(selectedProduct) < selectedProduct.precio_base" class="text-sm text-gray-400 line-through font-medium block" x-text="'$' + (selectedProduct.precio_anterior > selectedProduct.precio_base ? selectedProduct.precio_anterior : selectedProduct.precio_base).toFixed(2)"></span>
+                                <span class="text-4xl font-black" :class="getPrice(selectedProduct) < selectedProduct.precio_base ? 'text-red-500' : 'text-escala-green'" x-text="'$' + getPrice(selectedProduct).toFixed(2)"></span>
+                                <span class="text-xs font-bold text-escala-beige block mt-1">Desde $<span x-text="(getPrice(selectedProduct)/3).toFixed(2)"></span> /qna</span>
                             </div>
                         </div>
 
@@ -828,9 +727,9 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
 
     <div x-show="showPayrollModal" class="fixed inset-0 z-[70] flex items-center justify-center p-4" x-cloak>
         <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="!isPaying && (showPayrollModal = false)"></div>
-        <div class="relative bg-white w-full max-w-sm rounded-2xl p-8 shadow-2xl text-center">
+        <div class="relative bg-white w-full max-w-md rounded-2xl p-6 md:p-8 shadow-2xl text-center max-h-[95vh] overflow-y-auto no-scrollbar">
             
-            <div x-show="isPaying">
+            <div x-show="isPaying" class="py-10">
                 <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-escala-green mx-auto mb-4"></div>
                 <h3 class="font-bold text-lg text-slate-800">Procesando...</h3>
                 <p class="text-xs text-gray-500">Enviando solicitud a Recursos Humanos</p>
@@ -842,37 +741,98 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                 <p class="text-xs text-gray-400 mb-2 uppercase tracking-wide font-bold">Monto total de la compra</p>
                 <span class="font-black text-4xl text-escala-green block mb-6" x-text="'$' + totalPrice()"></span>
 
-                <p class="text-xs text-gray-800 mb-3 font-bold">Selecciona los plazos a diferir:</p>
-                <div class="flex gap-3 justify-center mb-6">
-                    <button @click="plazos = 1" :class="plazos === 1 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
-                        <span class="font-black text-lg">1</span><span class="text-[9px] uppercase font-bold">Qna</span>
-                    </button>
-                    <button @click="plazos = 2" :class="plazos === 2 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
-                        <span class="font-black text-lg">2</span><span class="text-[9px] uppercase font-bold">Qnas</span>
-                    </button>
-                    <button @click="plazos = 3" :class="plazos === 3 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
-                        <span class="font-black text-lg">3</span><span class="text-[9px] uppercase font-bold">Qnas</span>
-                    </button>
-                </div>
-
-                <div class="bg-blue-50/60 rounded-xl p-4 mb-8 border border-blue-100">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs font-bold text-gray-500 uppercase">Tu descuento quincenal:</span>
-                        <span class="font-black text-xl text-escala-blue" x-text="'$' + (parseFloat(totalPrice()) / plazos).toFixed(2)"></span>
+                <div class="mb-6 border-t border-gray-100 pt-6">
+                    <p class="text-[10px] text-gray-800 mb-4 font-bold uppercase tracking-widest">Método de Entrega:</p>
+                    
+                    <div class="flex items-center justify-center gap-3 mb-4">
+                        <span class="text-[10px] font-bold uppercase transition-colors" :class="!requiereEnvio ? 'text-escala-green' : 'text-gray-300'">Recoger en Oficina CDMX</span>
+                        
+                        <button @click="requiereEnvio = !requiereEnvio" 
+                                class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none"
+                                :class="requiereEnvio ? 'bg-escala-blue' : 'bg-gray-300'">
+                            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out"
+                                  :class="requiereEnvio ? 'translate-x-6' : 'translate-x-0'"></span>
+                        </button>
+                        
+                        <span class="text-[10px] font-bold uppercase transition-colors" :class="requiereEnvio ? 'text-escala-blue' : 'text-gray-300'">Enviar a provincia</span>
                     </div>
-                    <p class="text-[10px] text-gray-400 leading-tight text-right">
-                        <span x-show="plazos === 1">Se descontará en una sola exhibición.</span>
-                        <span x-show="plazos > 1">Durante las próximas <span x-text="plazos"></span> quincenas.</span>
-                    </p>
-                </div>
 
-                <div class="flex gap-3">
-                    <button @click="showPayrollModal = false" class="flex-1 py-3.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 text-xs uppercase transition-colors">
-                        Cancelar
-                    </button>
-                    <button @click="confirmarPedidoNomina()" class="flex-1 py-3.5 rounded-xl font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark hover:shadow-xl transition-all text-xs uppercase transform active:scale-95">
-                        Confirmar
-                    </button>
+                    <div x-show="requiereEnvio" x-collapse>
+                        <div class="bg-gray-50 rounded-xl p-4 text-left border border-gray-200 space-y-3 shadow-inner">
+                            
+                            <div>
+                                <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Estado *</label>
+                                <select x-model="formEnvio.estado" class="w-full text-xs font-bold text-gray-700 p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue bg-white transition-all shadow-sm">
+                                    <option value="" class="text-gray-400">Selecciona un estado...</option>
+                                    <template x-for="estado in estadosRepublica" :key="estado">
+                                        <option :value="estado" x-text="estado"></option>
+                                    </template>
+                                </select>
+                            </div>
+
+                            <div class="space-y-3 transition-opacity duration-300" :class="formEnvio.estado ? 'opacity-100' : 'opacity-40 pointer-events-none'">
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Calle y Número *</label>
+                                    <input type="text" x-model="formEnvio.calle" placeholder="Ej. Av. Siempre Viva 123" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                </div>
+                                
+                                <div class="flex gap-3">
+                                    <div class="w-2/3">
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Colonia *</label>
+                                        <input type="text" x-model="formEnvio.colonia" placeholder="Ej. Centro" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                    </div>
+                                    <div class="w-1/3">
+                                        <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">C.P. *</label>
+                                        <input type="text" x-model="formEnvio.cp" placeholder="00000" :disabled="!formEnvio.estado" maxlength="5" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Nombre de quien recibe *</label>
+                                    <input type="text" x-model="formEnvio.nombre_contacto" placeholder="Nombre completo" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                </div>
+
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Teléfono de contacto *</label>
+                                    <input type="text" x-model="formEnvio.telefono_contacto" placeholder="A 10 dígitos" :disabled="!formEnvio.estado" maxlength="15" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t border-gray-100 pt-6">
+                    <p class="text-xs text-gray-800 mb-3 font-bold">Selecciona los plazos a diferir:</p>
+                    <div class="flex gap-3 justify-center mb-6">
+                        <button @click="plazos = 1" :class="plazos === 1 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
+                            <span class="font-black text-lg">1</span><span class="text-[9px] uppercase font-bold">Qna</span>
+                        </button>
+                        <button @click="plazos = 2" :class="plazos === 2 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
+                            <span class="font-black text-lg">2</span><span class="text-[9px] uppercase font-bold">Qnas</span>
+                        </button>
+                        <button @click="plazos = 3" :class="plazos === 3 ? 'bg-escala-green text-white ring-2 ring-offset-2 ring-escala-green shadow-lg scale-105' : 'bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100'" class="flex-1 py-3 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
+                            <span class="font-black text-lg">3</span><span class="text-[9px] uppercase font-bold">Qnas</span>
+                        </button>
+                    </div>
+
+                    <div class="bg-blue-50/60 rounded-xl p-4 mb-8 border border-blue-100">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-bold text-gray-500 uppercase">Tu descuento quincenal:</span>
+                            <span class="font-black text-xl text-escala-blue" x-text="'$' + (parseFloat(totalPrice()) / plazos).toFixed(2)"></span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 leading-tight text-right">
+                            <span x-show="plazos === 1">Se descontará en una sola exhibición.</span>
+                            <span x-show="plazos > 1">Durante las próximas <span x-text="plazos"></span> quincenas.</span>
+                        </p>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button @click="showPayrollModal = false" class="flex-1 py-3.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 text-xs uppercase transition-colors">
+                            Cancelar
+                        </button>
+                        <button @click="confirmarPedidoNomina()" class="flex-1 py-3.5 rounded-xl font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark hover:shadow-xl transition-all text-xs uppercase transform active:scale-95">
+                            Confirmar
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
