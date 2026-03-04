@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php - EscalaBoutique (Intranet)
- * Versión: Producción Final (Optimizado, Lazy Loading, Incorporadas y Envíos Foráneos)
+ * Versión: Producción Final (Optimizado y Verificado con Lazy Loading + Incorporadas)
  */
 session_start();
 error_reporting(E_ALL);
@@ -195,7 +195,11 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     })
                     .then(r => r.json())
                     .then(data => {
-                        if(data.status === 'success') { window.location.reload(); } else { alert(data.message); }
+                        if(data.status === 'success') {
+                            window.location.reload(); 
+                        } else {
+                            alert(data.message);
+                        }
                     });
                 },
 
@@ -749,12 +753,12 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         
                         <button @click="requiereEnvio = !requiereEnvio" 
                                 class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none"
-                                :class="requiereEnvio ? 'bg-escala-blue' : 'bg-gray-300'">
+                                :class="requiereEnvio ? 'bg-escala-green' : 'bg-gray-300'">
                             <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out"
                                   :class="requiereEnvio ? 'translate-x-6' : 'translate-x-0'"></span>
                         </button>
                         
-                        <span class="text-[10px] font-bold uppercase transition-colors" :class="requiereEnvio ? 'text-escala-blue' : 'text-gray-300'">Enviar a provincia</span>
+                        <span class="text-[10px] font-bold uppercase transition-colors" :class="requiereEnvio ? 'text-escala-green' : 'text-gray-300'">Enviar a provincia</span>
                     </div>
 
                     <div x-show="requiereEnvio" x-collapse>
@@ -762,7 +766,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             
                             <div>
                                 <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Estado *</label>
-                                <select x-model="formEnvio.estado" class="w-full text-xs font-bold text-gray-700 p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue bg-white transition-all shadow-sm">
+                                <select x-model="formEnvio.estado" class="w-full text-xs font-bold text-gray-700 p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green bg-white transition-all shadow-sm">
                                     <option value="" class="text-gray-400">Selecciona un estado...</option>
                                     <template x-for="estado in estadosRepublica" :key="estado">
                                         <option :value="estado" x-text="estado"></option>
@@ -773,28 +777,28 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                             <div class="space-y-3 transition-opacity duration-300" :class="formEnvio.estado ? 'opacity-100' : 'opacity-40 pointer-events-none'">
                                 <div>
                                     <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Calle y Número *</label>
-                                    <input type="text" x-model="formEnvio.calle" placeholder="Ej. Av. Siempre Viva 123" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                    <input type="text" x-model="formEnvio.calle" placeholder="Ej. Av. Siempre Viva 123" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green disabled:bg-gray-100 font-medium">
                                 </div>
                                 
                                 <div class="flex gap-3">
                                     <div class="w-2/3">
                                         <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Colonia *</label>
-                                        <input type="text" x-model="formEnvio.colonia" placeholder="Ej. Centro" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                        <input type="text" x-model="formEnvio.colonia" placeholder="Ej. Centro" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green disabled:bg-gray-100 font-medium">
                                     </div>
                                     <div class="w-1/3">
                                         <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">C.P. *</label>
-                                        <input type="text" x-model="formEnvio.cp" placeholder="00000" :disabled="!formEnvio.estado" maxlength="5" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                        <input type="text" x-model="formEnvio.cp" placeholder="00000" :disabled="!formEnvio.estado" maxlength="5" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green disabled:bg-gray-100 font-medium">
                                     </div>
                                 </div>
 
                                 <div>
                                     <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Nombre de quien recibe *</label>
-                                    <input type="text" x-model="formEnvio.nombre_contacto" placeholder="Nombre completo" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                    <input type="text" x-model="formEnvio.nombre_contacto" placeholder="Nombre completo" :disabled="!formEnvio.estado" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green disabled:bg-gray-100 font-medium">
                                 </div>
 
                                 <div>
                                     <label class="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Teléfono de contacto *</label>
-                                    <input type="text" x-model="formEnvio.telefono_contacto" placeholder="A 10 dígitos" :disabled="!formEnvio.estado" maxlength="15" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-blue/20 focus:border-escala-blue disabled:bg-gray-100 font-medium">
+                                    <input type="text" x-model="formEnvio.telefono_contacto" placeholder="A 10 dígitos" :disabled="!formEnvio.estado" maxlength="15" class="w-full text-xs p-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-escala-green/20 focus:border-escala-green disabled:bg-gray-100 font-medium">
                                 </div>
                             </div>
                         </div>
@@ -817,7 +821,7 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                     <div class="bg-blue-50/60 rounded-xl p-4 mb-8 border border-blue-100">
                         <div class="flex justify-between items-center mb-1">
                             <span class="text-xs font-bold text-gray-500 uppercase">Tu descuento quincenal:</span>
-                            <span class="font-black text-xl text-escala-blue" x-text="'$' + (parseFloat(totalPrice()) / plazos).toFixed(2)"></span>
+                            <span class="font-black text-xl text-escala-green" x-text="'$' + (parseFloat(totalPrice()) / plazos).toFixed(2)"></span>
                         </div>
                         <p class="text-[10px] text-gray-400 leading-tight text-right">
                             <span x-show="plazos === 1">Se descontará en una sola exhibición.</span>
@@ -829,7 +833,10 @@ $nombreCompleto = isset($_SESSION['usuario_empleado']) ? $_SESSION['usuario_empl
                         <button @click="showPayrollModal = false" class="flex-1 py-3.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 text-xs uppercase transition-colors">
                             Cancelar
                         </button>
-                        <button @click="confirmarPedidoNomina()" class="flex-1 py-3.5 rounded-xl font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark hover:shadow-xl transition-all text-xs uppercase transform active:scale-95">
+                        <button @click="confirmarPedidoNomina()" 
+                                class="flex-1 py-3.5 rounded-xl font-bold bg-escala-green text-white shadow-lg hover:bg-escala-dark hover:shadow-xl transition-all text-xs uppercase transform active:scale-95 transform active:scale-95 transform active:scale-95"
+                                :class="(requiereEnvio && (!formEnvio.estado || !formEnvio.calle.trim() || !formEnvio.colonia.trim() || !formEnvio.cp.trim() || !formEnvio.nombre_contacto.trim() || !formEnvio.telefono_contacto.trim())) ? 'opacity-50 cursor-not-allowed' : ''"
+                                :disabled="requiereEnvio && (!formEnvio.estado || !formEnvio.calle.trim() || !formEnvio.colonia.trim() || !formEnvio.cp.trim() || !formEnvio.nombre_contacto.trim() || !formEnvio.telefono_contacto.trim())">
                             Confirmar
                         </button>
                     </div>
