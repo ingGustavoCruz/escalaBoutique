@@ -31,7 +31,6 @@ $plazos = isset($input['plazos']) ? (int)$input['plazos'] : 1;
 if (!in_array($plazos, [1, 2, 3])) { $plazos = 1; }
 $total_frontend = $input['total'];
 
-// --- NUEVO: DATOS DE ENVÍO LLEGANDO DEL FRONTEND ---
 $requiere_envio = !empty($input['requiereEnvio']) ? 1 : 0;
 $form_envio = $input['formEnvio'] ?? [];
 
@@ -40,14 +39,12 @@ try {
     $total_calculado = 0; 
     $htmlTablaProductos = ""; 
 
-    // 1. Crear Cabecera del Pedido (Añadimos requiere_envio)
     $stmtPedido = $conn->prepare("INSERT INTO pedidos (empleado_id, monto_total, plazos, estado, requiere_envio, fecha_pedido) VALUES (?, ?, ?, 'pendiente', ?, NOW())");
     $stmtPedido->bind_param("idii", $empleado_id, $total_frontend, $plazos, $requiere_envio);
     if (!$stmtPedido->execute()) throw new Exception("Error al crear pedido en BD.");
     $pedido_id = $conn->insert_id;
     $stmtPedido->close();
 
-    // 2. Guardar Dirección en la tabla secundaria si aplica
     if ($requiere_envio) {
         $stmtDir = $conn->prepare("INSERT INTO direcciones_envio (pedido_id, estado, calle, colonia, cp, nombre_contacto, telefono_contacto) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmtDir->bind_param("issssss", $pedido_id, $form_envio['estado'], $form_envio['calle'], $form_envio['colonia'], $form_envio['cp'], $form_envio['nombre_contacto'], $form_envio['telefono_contacto']);
@@ -55,7 +52,6 @@ try {
         $stmtDir->close();
     }
 
-    // 3. Procesar Productos
     foreach ($carrito as $item) {
         $producto_id = (int)$item['id']; 
         $cantidad = (int)$item['qty'];
@@ -81,7 +77,6 @@ try {
         $stmtDetalle->execute(); 
         $stmtDetalle->close();
 
-        // Descontar Stock y Bitácora
         $motivo_audit = "VENTA PEDIDO #$pedido_id"; 
         $cambio_stock = $cantidad * -1;
         if ($talla) {
@@ -105,7 +100,6 @@ try {
         $stmtLog->execute(); 
         $stmtLog->close();
 
-        // Empresa para correo
         $inc_nombre = "";
         if ($incorporada_id) {
             $stmtInc = $conn->prepare("SELECT nombre FROM incorporadas WHERE id = ?");
@@ -125,7 +119,6 @@ try {
         $conn->query("UPDATE pedidos SET monto_total = $total_calculado WHERE id = $pedido_id");
     }
 
-    // 4. Cuotas Nómina
     $monto_cuota = round($total_calculado / $plazos, 2); 
     $suma_cuotas = $monto_cuota * $plazos; 
     $ajuste = round($total_calculado - $suma_cuotas, 2);
@@ -139,7 +132,6 @@ try {
 
     $conn->commit();
 
-    // 5. Correos: Generar bloque HTML si hay envío
     $htmlEnvio = $requiere_envio ? "
         <h3 style='font-size: 14px; border-bottom: 2px solid #00524A; padding-bottom: 5px; margin-top: 20px;'>Dirección de Envío (Provincia)</h3>
         <table style='width: 100%; font-size: 13px; background: #eef2f3; padding: 10px; border-radius: 5px;'>
@@ -150,7 +142,9 @@ try {
         <p style='font-size: 13px; color: #555;'>Recoger en Oficina CDMX</p>";
 
     $asunto = "Confirmación Pedido #$pedido_id - Escala Boutique";
-    $mensajeHTML = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px;'><div style='background-color: #00524A; padding: 20px; text-align: center;'><h1 style='color: white; margin: 0; font-size: 24px;'>ESCALA BOUTIQUE</h1><p style='color: #a8d5d0; margin: 5px 0 0; font-size: 12px; text-transform: uppercase;'>Comprobante de Pedido</p></div><div style='padding: 20px; background-color: #ffffff;'><p>Hola <strong>$empleado_nombre</strong>, hemos recibido tu solicitud.</p><table style='width: 100%; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 14px;'><tr><td><strong>Empleado:</strong></td><td>$empleado_nombre ($empleado_num)</td></tr><tr><td><strong>Área:</strong></td><td>$empleado_area</td></tr><tr><td><strong>Pedido ID:</strong></td><td>#$pedido_id</td></tr><tr><td><strong>Plazos:</strong></td><td><strong style='color: #00524A;'>$plazos Quincenas</strong></td></tr></table> $htmlEnvio <h3 style='font-size: 16px; border-bottom: 2px solid #00524A; padding-bottom: 5px; margin-bottom: 10px; margin-top: 20px;'>Detalle de la Compra</h3><table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'><thead style='background-color: #eee;'><tr><th style='padding: 8px; text-align: left; font-size: 12px;'>PRODUCTO</th><th style='padding: 8px; font-size: 12px;'>CANT.</th><th style='padding: 8px; text-align: right; font-size: 12px;'>SUBTOTAL</th></tr></thead><tbody>$htmlTablaProductos</tbody><tfoot><tr><td colspan='2' style='text-align: right; padding: 15px 10px; font-weight: bold;'>TOTAL:</td><td style='text-align: right; padding: 15px 10px; font-weight: bold; color: #00524A; font-size: 18px;'>$" . number_format($total_calculado, 2) . "</td></tr>" . ($plazos > 1 ? "<tr><td colspan='3' style='text-align: right; padding: 0 10px; font-size: 12px; color: #666;'>Descuento quincenal aprox: <strong>$" . number_format($total_calculado / $plazos, 2) . "</strong></td></tr>" : "") . "</tfoot></table><div style='background-color: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; font-size: 12px; color: #0d47a1;'><strong>Información:</strong> El descuento se verá reflejado en tu nómina.</div></div></div>";
+    
+    // MODIFICADO: Agregado el correo electrónico justo después del saludo
+    $mensajeHTML = "<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px;'><div style='background-color: #00524A; padding: 20px; text-align: center;'><h1 style='color: white; margin: 0; font-size: 24px;'>ESCALA BOUTIQUE</h1><p style='color: #a8d5d0; margin: 5px 0 0; font-size: 12px; text-transform: uppercase;'>Comprobante de Pedido</p></div><div style='padding: 20px; background-color: #ffffff;'><p style='margin-bottom: 5px;'>Hola <strong>$empleado_nombre</strong>, hemos recibido tu solicitud.</p><p style='margin-top: 0; margin-bottom: 20px; font-size: 13px; color: #666;'><strong>Correo de contacto:</strong> <a href='mailto:$empleado_email' style='color: #00524A; font-weight: bold;'>$empleado_email</a></p><table style='width: 100%; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 14px;'><tr><td><strong>Empleado:</strong></td><td>$empleado_nombre ($empleado_num)</td></tr><tr><td><strong>Área:</strong></td><td>$empleado_area</td></tr><tr><td><strong>Pedido ID:</strong></td><td>#$pedido_id</td></tr><tr><td><strong>Plazos:</strong></td><td><strong style='color: #00524A;'>$plazos Quincenas</strong></td></tr></table> $htmlEnvio <h3 style='font-size: 16px; border-bottom: 2px solid #00524A; padding-bottom: 5px; margin-bottom: 10px; margin-top: 20px;'>Detalle de la Compra</h3><table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'><thead style='background-color: #eee;'><tr><th style='padding: 8px; text-align: left; font-size: 12px;'>PRODUCTO</th><th style='padding: 8px; font-size: 12px;'>CANT.</th><th style='padding: 8px; text-align: right; font-size: 12px;'>SUBTOTAL</th></tr></thead><tbody>$htmlTablaProductos</tbody><tfoot><tr><td colspan='2' style='text-align: right; padding: 15px 10px; font-weight: bold;'>TOTAL:</td><td style='text-align: right; padding: 15px 10px; font-weight: bold; color: #00524A; font-size: 18px;'>$" . number_format($total_calculado, 2) . "</td></tr>" . ($plazos > 1 ? "<tr><td colspan='3' style='text-align: right; padding: 0 10px; font-size: 12px; color: #666;'>Descuento quincenal aprox: <strong>$" . number_format($total_calculado / $plazos, 2) . "</strong></td></tr>" : "") . "</tfoot></table><div style='background-color: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; font-size: 12px; color: #0d47a1;'><strong>Información:</strong> El descuento se verá reflejado en tu nómina.</div></div></div>";
 
     $email_nomina = get_config('email_nomina', $conn); 
     $email_almacen = get_config('email_almacen', $conn);
